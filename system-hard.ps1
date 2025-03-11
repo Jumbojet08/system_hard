@@ -1,4 +1,4 @@
-﻿$resultsFile = "C:\Users\082820\Downloads\SecurityCheckResults.txt"
+$resultsFile = "C:\Users\082820\Downloads\SecurityCheckResults.txt"
 $auditpolFile = "C:\Windows\Temp\auditpol.txt"
 
 # Create results array
@@ -711,6 +711,218 @@ function Check-AutorunSettings {
         Add-Result -Description $Description -Status "Error" -Details "Error checking autorun settings: $_"
     }
 }
+# Function to check security policy settings related to interactive logon
+function Check-InteractiveLogonPolicy {
+    param (
+        [string]$PolicyName,
+        [string]$ExpectedValue,
+        [string]$Description
+    )
+    
+    try {
+        # Use secedit to export security policy
+        $tempFile = "C:\Windows\Temp\secedit_security.txt"
+        secedit /export /areas SECURITYPOLICY /cfg $tempFile | Out-Null
+        
+        if (Test-Path $tempFile) {
+            $content = Get-Content -Path $tempFile -Raw
+            
+            if ($content -match "$PolicyName\s*=\s*(.+)") {
+                $actualValue = $matches[1].Trim()
+                $details = "Expected: $ExpectedValue, Found: $actualValue"
+                
+                if ($actualValue -eq $ExpectedValue) {
+                    Add-Result -Description $Description -Status "Applied" -Details $details
+                } else {
+                    Add-Result -Description $Description -Status "Not Applied" -Details $details
+                }
+            } else {
+                Add-Result -Description $Description -Status "Not Found" -Details "Policy not found in security configuration"
+            }
+            
+            Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
+        } else {
+            Add-Result -Description $Description -Status "Error" -Details "Failed to export security policy"
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking security policy: $_"
+    }
+}
+
+# Function to check user right assignments
+function Check-UserRightAssignment {
+    param (
+        [string]$RightName,
+        [string]$Description,
+        [string[]]$AllowedAccounts = @(),
+        [bool]$ShouldBeEmpty = $false
+    )
+    
+    try {
+        # Use secedit to export user rights
+        $tempFile = "C:\Windows\Temp\secedit_rights.txt"
+        secedit /export /areas USER_RIGHTS /cfg $tempFile | Out-Null
+        
+        if (Test-Path $tempFile) {
+            $content = Get-Content -Path $tempFile -Raw
+            
+            if ($content -match "$RightName\s*=\s*(.+)") {
+                $accounts = $matches[1].Trim().Split(',').Trim()
+                $details = "Accounts with this right: $($accounts -join ', ')"
+                
+                if ($ShouldBeEmpty -and $accounts.Count -eq 0) {
+                    Add-Result -Description $Description -Status "Applied" -Details "No accounts have this right"
+                } 
+                elseif ($ShouldBeEmpty -and $accounts.Count -gt 0) {
+                    Add-Result -Description $Description -Status "Not Applied" -Details $details
+                }
+                elseif (-not $ShouldBeEmpty -and $AllowedAccounts.Count -gt 0) {
+                    $unauthorized = $accounts | Where-Object { $AllowedAccounts -notcontains $_ }
+                    
+                    if ($unauthorized.Count -eq 0) {
+                        Add-Result -Description $Description -Status "Applied" -Details "Only authorized accounts have this right"
+                    } else {
+                        Add-Result -Description $Description -Status "Not Applied" -Details "Unauthorized accounts: $($unauthorized -join ', ')"
+                    }
+                } else {
+                    Add-Result -Description $Description -Status "Applied" -Details $details
+                }
+            } else {
+                Add-Result -Description $Description -Status "Not Found" -Details "User right not found in security configuration"
+            }
+            
+            Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
+        } else {
+            Add-Result -Description $Description -Status "Error" -Details "Failed to export user rights"
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking user rights: $_"
+    }
+}
+
+# Function to check NTLM and LAN Manager settings
+function Check-NTLMSettings {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $ntlmPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+        $lmCompatLevel = (Get-ItemProperty -Path $ntlmPath -Name "LmCompatibilityLevel" -ErrorAction SilentlyContinue).LmCompatibilityLevel
+        $storeLMHash = (Get-ItemProperty -Path $ntlmPath -Name "NoLMHash" -ErrorAction SilentlyContinue).NoLMHash
+        
+        $details = "LM Compatibility Level: $lmCompatLevel, Don't store LM hash: $storeLMHash"
+        
+        # Level 5 = Send NTLMv2 only, refuse LM & NTLM
+        # NoLMHash = 1 means don't store LM hash on password change
+        if ($lmCompatLevel -ge 3 -and $storeLMHash -eq 1) {
+            Add-Result -Description $Description -Status "Applied" -Details $details
+        } else {
+            Add-Result -Description $Description -Status "Not Applied" -Details $details
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking NTLM settings: $_"
+    }
+}
+
+# Function to check additional UAC settings
+function Check-AdditionalUACSettings {
+    param (
+        [string]$RegistryName,
+        [string]$Description,
+        [int]$ExpectedValue
+    )
+    
+    try {
+        $uacPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+        $actualValue = (Get-ItemProperty -Path $uacPath -Name $RegistryName -ErrorAction SilentlyContinue).$RegistryName
+        
+        if ($null -eq $actualValue) {
+            Add-Result -Description $Description -Status "Not Found" -Details "Setting not found in registry"
+        } else {
+            $details = "Expected: $ExpectedValue, Found: $actualValue"
+            
+            if ($actualValue -eq $ExpectedValue) {
+                Add-Result -Description $Description -Status "Applied" -Details $details
+            } else {
+                Add-Result -Description $Description -Status "Not Applied" -Details $details
+            }
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking UAC setting: $_"
+    }
+}
+
+# Function to check Recovery Console settings
+function Check-RecoveryConsoleSettings {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $recoveryPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Setup\RecoveryConsole"
+        $autoAdminLogon = (Get-ItemProperty -Path $recoveryPath -Name "SecurityLevel" -ErrorAction SilentlyContinue).SecurityLevel
+        
+        if ($null -eq $autoAdminLogon) {
+            Add-Result -Description $Description -Status "Not Found" -Details "Recovery console setting not found"
+        } else {
+            $details = "Expected: 0 (Disabled), Found: $autoAdminLogon"
+            
+            if ($autoAdminLogon -eq 0) {
+                Add-Result -Description $Description -Status "Applied" -Details $details
+            } else {
+                Add-Result -Description $Description -Status "Not Applied" -Details $details
+            }
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking Recovery Console settings: $_"
+    }
+}
+
+# Function to check anonymous enumeration settings
+function Check-AnonymousEnumeration {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $lsaPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+        $restrictAnonymous = (Get-ItemProperty -Path $lsaPath -Name "RestrictAnonymous" -ErrorAction SilentlyContinue).RestrictAnonymous
+        $restrictAnonymousSAM = (Get-ItemProperty -Path $lsaPath -Name "RestrictAnonymousSAM" -ErrorAction SilentlyContinue).RestrictAnonymousSAM
+        
+        $details = "Restrict Anonymous: $restrictAnonymous, Restrict Anonymous SAM: $restrictAnonymousSAM"
+        
+        if ($restrictAnonymous -eq 1 -and $restrictAnonymousSAM -eq 1) {
+            Add-Result -Description $Description -Status "Applied" -Details $details
+        } else {
+            Add-Result -Description $Description -Status "Not Applied" -Details $details
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking anonymous enumeration settings: $_"
+    }
+}
+
+# Function to check logon banner settings
+function Check-LogonBanner {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $bannerPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+        $legalNoticeCaption = (Get-ItemProperty -Path $bannerPath -Name "legalnoticecaption" -ErrorAction SilentlyContinue).legalnoticecaption
+        $legalNoticeText = (Get-ItemProperty -Path $bannerPath -Name "legalnoticetext" -ErrorAction SilentlyContinue).legalnoticetext
+        
+        if ($null -eq $legalNoticeCaption -or $null -eq $legalNoticeText -or $legalNoticeCaption -eq "" -or $legalNoticeText -eq "") {
+            Add-Result -Description $Description -Status "Not Applied" -Details "Logon banner not configured"
+        } else {
+            $details = "Banner Title: $legalNoticeCaption"
+            Add-Result -Description $Description -Status "Applied" -Details $details
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking logon banner: $_"
+    }
+}
 
 # Run all checks
 Write-Host "Running security configuration checks..."
@@ -747,6 +959,36 @@ Check-NetworkAdapters -Description "Disable unused network adapters"
 Check-UACSettings -Description "Enable UAC" -RegistryName "EnableLUA" -ExpectedValue 1
 Check-UACSettings -Description "Set UAC to highest level" -RegistryName "ConsentPromptBehaviorAdmin" -ExpectedValue 2
 Check-UACSettings -Description "Enable secure desktop" -RegistryName "PromptOnSecureDesktop" -ExpectedValue 1
+# New UAC Settings Checks
+Check-AdditionalUACSettings -RegistryName "EnableUIADesktopToggle" -Description "Set 'Admin Approval Mode for the built-in Administrator account' to Enabled" -ExpectedValue 1
+Check-AdditionalUACSettings -RegistryName "ValidateAdminCodeSignatures" -Description "Set 'Only elevate executables that are signed and validated' to Enabled" -ExpectedValue 1
+Check-AdditionalUACSettings -RegistryName "EnableInstallerDetection" -Description "Set 'Detect application installations and prompt for elevation' to Enabled" -ExpectedValue 1
+Check-AdditionalUACSettings -RegistryName "EnableSecureUIAPaths" -Description "Set 'Only elevate UIAccess applications that are installed in secure locations' to Enabled" -ExpectedValue 1
+Check-AdditionalUACSettings -RegistryName "EnableVirtualization" -Description "Set 'Virtualize file and registry write failures to per-user locations' to Enabled" -ExpectedValue 1
+Check-AdditionalUACSettings -RegistryName "ConsentPromptBehaviorUser" -Description "Set 'Behavior of the elevation prompt for standard users' to 'Prompt for credentials on the secure desktop'" -ExpectedValue 1
+
+# Interactive Logon Policies
+Check-InteractiveLogonPolicy -PolicyName "MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\DontDisplayLastUserName" -ExpectedValue "1" -Description "Security Option: Interactive Logon - Do not display last user name"
+Check-InteractiveLogonPolicy -PolicyName "MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\DisableCAD" -ExpectedValue "0" -Description "Set the 'Do not require CTRL+ALT+DEL' policy setting to Disabled"
+Check-InteractiveLogonPolicy -PolicyName "MACHINE\System\CurrentControlSet\Control\Lsa\LimitBlankPasswordUse" -ExpectedValue "1" -Description "Set the 'Limit local account use of blank passwords to console logon only' right to Enable"
+
+# Check Logon Banner
+Check-LogonBanner -Description "Configure the logon message title and text for users attempting to log on"
+
+# NTLM and LAN Manager Settings
+Check-NTLMSettings -Description "Disable LAN Manager hash use and enable NTLMv2"
+
+# Anonymous Enumeration Settings
+Check-AnonymousEnumeration -Description "Set the 'Do not allow anonymous enumeration of SAM accounts and shares' policy setting to Enabled"
+
+# Recovery Console Settings
+Check-RecoveryConsoleSettings -Description "Set the 'Recovery Console: Allow automatic administrative logon' policy setting to Disabled"
+
+# User Rights Assignments
+Check-UserRightAssignment -RightName "SeTcbPrivilege" -Description "Remove the 'Act as part of the operating system' right from all accounts" -ShouldBeEmpty $true
+Check-UserRightAssignment -RightName "SeDebugPrivilege" -Description "Remove the 'Debug programs' right from all accounts unless necessary" -AllowedAccounts @("*S-1-5-32-544") # Only Administrators
+Check-UserRightAssignment -RightName "SeNetworkLogonRight" -Description "Restrict 'Access this computer from the network' right" -AllowedAccounts @("*S-1-5-32-544", "*S-1-5-32-545") # Admins and Users
+Check-UserRightAssignment -RightName "SeRemoteShutdownPrivilege" -Description "Restrict the 'Force Shutdown from a Remote System' policy to administrators" -AllowedAccounts @("*S-1-5-32-544") # Only Administrators
 
 # Calculate compliance percentage
 $compliancePercentage = [math]::Round(($passedChecks / $totalChecks) * 100, 2)
