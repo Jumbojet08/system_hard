@@ -1,0 +1,782 @@
+﻿$resultsFile = "C:\Users\082820\Downloads\SecurityCheckResults.txt"
+$auditpolFile = "C:\Windows\Temp\auditpol.txt"
+
+# Create results array
+$results = @()
+$totalChecks = 0
+$passedChecks = 0
+
+# Function to add result to results array
+function Add-Result {
+    param (
+        [string]$Description,
+        [string]$Status,
+        [string]$Details = ""
+    )
+    
+    $global:totalChecks++
+    if ($Status -eq "Applied") {
+        $global:passedChecks++
+    }
+    
+    $result = [PSCustomObject]@{
+        Description = $Description
+        Status = $Status
+        Details = $Details
+    }
+    
+    $global:results += $result
+}
+
+# Function to check registry setting
+function Check-RegistrySetting {
+    param (
+        [string]$Path,
+        [string]$Name,
+        [object]$ExpectedValue,
+        [string]$Description
+    )
+    
+    try {
+        if (Test-Path -Path $Path) {
+            $value = Get-ItemProperty -Path $Path -Name $Name -ErrorAction SilentlyContinue
+            
+            if ($null -ne $value) {
+                $actualValue = $value.$Name
+                $details = "Expected: $ExpectedValue, Found: $actualValue"
+                
+                if ($actualValue -eq $ExpectedValue) {
+                    Add-Result -Description $Description -Status "Applied" -Details $details
+                } else {
+                    Add-Result -Description $Description -Status "Not Applied" -Details $details
+                }
+            } else {
+                Add-Result -Description $Description -Status "Not Found" -Details "Setting name not found in registry"
+            }
+        } else {
+            Add-Result -Description $Description -Status "Not Found" -Details "Registry path not found"
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking registry: $_"
+    }
+}
+
+# Function to check local security policy
+function Check-SecurityPolicy {
+    param (
+        [string]$PolicyArea,
+        [string]$PolicyName,
+        [string]$ExpectedValue,
+        [string]$Description
+    )
+    
+    try {
+        # Use secedit to export just the requested area
+        $tempFile = "C:\Windows\Temp\secedit_$($PolicyArea).txt"
+        secedit /export /areas $PolicyArea /cfg $tempFile | Out-Null
+        
+        if (Test-Path $tempFile) {
+            $content = Get-Content -Path $tempFile -Raw
+            
+            if ($content -match "$PolicyName\s*=\s*(.+)") {
+                $actualValue = $matches[1].Trim()
+                $details = "Expected: $ExpectedValue, Found: $actualValue"
+                
+                if ($actualValue -eq $ExpectedValue) {
+                    Add-Result -Description $Description -Status "Applied" -Details $details
+                } else {
+                    Add-Result -Description $Description -Status "Not Applied" -Details $details
+                }
+            } else {
+                Add-Result -Description $Description -Status "Not Found" -Details "Policy not found in security configuration"
+            }
+            
+            Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
+        } else {
+            Add-Result -Description $Description -Status "Error" -Details "Failed to export security policy area"
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking security policy: $_"
+    }
+}
+
+# Function to check group policy setting
+function Check-GroupPolicy {
+    param (
+        [string]$GPOPath,
+        [string]$ExpectedValue,
+        [string]$Description
+    )
+    
+    try {
+        # Use gpresult to get applied policies
+        $tempFile = "C:\Windows\Temp\gpresult.txt"
+        gpresult /f /scope computer > $tempFile
+        
+        if (Test-Path $tempFile) {
+            $content = Get-Content -Path $tempFile -Raw
+            
+            if ($content -match [regex]::Escape($GPOPath) + ".*?:\s*(.+)") {
+                $actualValue = $matches[1].Trim()
+                $details = "Expected: $ExpectedValue, Found: $actualValue"
+                
+                if ($actualValue -match $ExpectedValue) {
+                    Add-Result -Description $Description -Status "Applied" -Details $details
+                } else {
+                    Add-Result -Description $Description -Status "Not Applied" -Details $details
+                }
+            } else {
+                Add-Result -Description $Description -Status "Not Found" -Details "Group Policy setting not found"
+            }
+            
+            Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
+        } else {
+            Add-Result -Description $Description -Status "Error" -Details "Failed to retrieve Group Policy results"
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking Group Policy: $_"
+    }
+}
+
+# Function to check if a service is disabled
+function Check-ServiceDisabled {
+    param (
+        [string]$ServiceName,
+        [string]$Description
+    )
+    
+    try {
+        $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+        
+        if ($null -eq $service) {
+            Add-Result -Description $Description -Status "Not Installed" -Details "Service is not installed"
+        } else {
+            $status = $service.StartType
+            $details = "Current status: $status"
+            
+            if ($status -eq "Disabled") {
+                Add-Result -Description $Description -Status "Applied" -Details $details
+            } else {
+                Add-Result -Description $Description -Status "Not Applied" -Details $details
+            }
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking service: $_"
+    }
+}
+
+# Function to check for USB storage restrictions using registry
+function Check-USBStorageRestrictions {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # Check multiple methods of USB storage restriction
+        $methodsChecked = @()
+        $methodsApplied = @()
+        
+        # Method 1: Check if USBSTOR service is disabled
+        $usbstorService = Get-Service -Name "USBSTOR" -ErrorAction SilentlyContinue
+        $methodsChecked += "USBSTOR Service"
+        if ($null -ne $usbstorService -and $usbstorService.StartType -eq "Disabled") {
+            $methodsApplied += "USBSTOR Service Disabled"
+        }
+        
+        # Method 2: Check Group Policy for USB storage device restriction
+        $gpoPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices\Deny_All"
+        $denyAll = Get-ItemProperty -Path $gpoPath -Name "Deny" -ErrorAction SilentlyContinue
+        $methodsChecked += "Group Policy Restriction"
+        if ($null -ne $denyAll -and $denyAll.Deny -eq 1) {
+            $methodsApplied += "Group Policy Restriction Applied"
+        }
+        
+        # Method 3: Check device installation restrictions
+        $deviceInstallPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions"
+        $denyDeviceInstall = Get-ItemProperty -Path $deviceInstallPath -Name "DenyRemovableDevices" -ErrorAction SilentlyContinue
+        $methodsChecked += "Device Installation Restriction"
+        if ($null -ne $denyDeviceInstall -and $denyDeviceInstall.DenyRemovableDevices -eq 1) {
+            $methodsApplied += "Device Installation Restriction Applied"
+        }
+        
+        if ($methodsApplied.Count -gt 0) {
+            Add-Result -Description $Description -Status "Applied" -Details "Restrictions found: $($methodsApplied -join ", ")"
+        } else {
+            Add-Result -Description $Description -Status "Not Applied" -Details "No USB storage restrictions found. Methods checked: $($methodsChecked -join ", ")"
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking USB restrictions: $_"
+    }
+}
+
+# Function to check for CD-ROM restrictions using registry
+function Check-CDROMRestrictions {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # Check multiple methods of CD-ROM restriction
+        $methodsChecked = @()
+        $methodsApplied = @()
+        
+        # Method 1: Check CD-ROM service startup type
+        $cdromService = Get-Service -Name "cdrom" -ErrorAction SilentlyContinue
+        $methodsChecked += "CDROM Service"
+        if ($null -ne $cdromService -and $cdromService.StartType -eq "Disabled") {
+            $methodsApplied += "CDROM Service Disabled"
+        }
+        
+        # Method 2: Check Group Policy for CD-ROM restriction
+        $gpoPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices\CD-ROM"
+        $denyCD = Get-ItemProperty -Path $gpoPath -Name "Deny" -ErrorAction SilentlyContinue
+        $methodsChecked += "Group Policy Restriction"
+        if ($null -ne $denyCD -and $denyCD.Deny -eq 1) {
+            $methodsApplied += "Group Policy Restriction Applied"
+        }
+        
+        # Method 3: Check for access restriction via registry
+        $accessPath = "HKLM\SYSTEM\CurrentControlSet\Services\cdrom\Parameters"
+        $autorun = Get-ItemProperty -Path $accessPath -Name "AutoRun" -ErrorAction SilentlyContinue
+        $methodsChecked += "Registry Access Restriction"
+        if ($null -ne $autorun -and $autorun.AutoRun -eq 0) {
+            $methodsApplied += "Registry Access Restriction Applied"
+        }
+        
+        if ($methodsApplied.Count -gt 0) {
+            Add-Result -Description $Description -Status "Applied" -Details "Restrictions found: $($methodsApplied -join ", ")"
+        } else {
+            Add-Result -Description $Description -Status "Not Applied" -Details "No CD-ROM restrictions found. Methods checked: $($methodsChecked -join ", ")"
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking CD-ROM restrictions: $_"
+    }
+}
+
+# Function to check for unnecessary programs
+function Check-UnnecessaryPrograms {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $unwantedPrograms = @(
+            "TeamViewer", "uTorrent", "AnyDesk", "Skype", "Zoom", 
+            "BitTorrent", "Limewire", "TorrentClient", "Remote Utilities",
+            "LogMeIn", "Chrome Remote Desktop", "VNC", "TightVNC", "UltraVNC"
+        )
+        
+        $installed = @()
+        $installed += Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | 
+                     Where-Object DisplayName -ne $null | 
+                     Select-Object DisplayName
+        $installed += Get-ItemProperty HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | 
+                     Where-Object DisplayName -ne $null | 
+                     Select-Object DisplayName
+        
+        $found = @($installed | Where-Object { $unwantedPrograms -contains $_.DisplayName })
+        
+        if ($found.Count -eq 0) {
+            Add-Result -Description $Description -Status "Applied" -Details "No unnecessary programs found"
+        } else {
+            $programList = ($found.DisplayName -join ", ")
+            Add-Result -Description $Description -Status "Not Applied" -Details "Found: $programList"
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking programs: $_"
+    }
+}
+
+# Function to check user accounts
+function Check-UserAccounts {
+    param (
+        [string]$Description,
+        [string]$AccountType
+    )
+    
+    try {
+        if ($AccountType -eq "Admin") {
+            # Use ADSI instead of Get-LocalGroupMember
+            $adminGroup = [ADSI]"WinNT://$env:COMPUTERNAME/Administrators"
+            $adminUsers = @()
+            
+            $adminGroup.Members() | ForEach-Object {
+                try {
+                    $adminUsers += $_.GetType().InvokeMember("Name", 'GetProperty', $null, $_, $null)
+                } catch {
+                    # Skip failed member retrievals
+                }
+            }
+            
+            Add-Result -Description $Description -Status "Applied" -Details "Found $($adminUsers.Count) admin users"
+        }
+        elseif ($AccountType -eq "Standard") {
+            # Get all local users
+            $allUsers = Get-WmiObject -Class Win32_UserAccount -Filter "LocalAccount='True'"
+            $adminGroup = [ADSI]"WinNT://$env:COMPUTERNAME/Administrators"
+            $adminUsers = @()
+            
+            $adminGroup.Members() | ForEach-Object {
+                try {
+                    $adminUsers += $_.GetType().InvokeMember("Name", 'GetProperty', $null, $_, $null)
+                } catch {
+                    # Skip failed member retrievals
+                }
+            }
+            
+            $standardUsers = $allUsers | Where-Object { $adminUsers -notcontains $_.Name -and $_.Disabled -eq $false }
+            Add-Result -Description $Description -Status "Applied" -Details "Found $($standardUsers.Count) enabled standard users"
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking user accounts: $_"
+    }
+}
+
+# Function to check if built-in admin is renamed
+function Check-AdminRenamed {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # Use WMI to find built-in administrator account (SID ending in 500)
+        $adminAccount = Get-WmiObject -Class Win32_UserAccount -Filter "LocalAccount='True' AND SID LIKE '%-500'"
+        
+        if ($null -eq $adminAccount) {
+            Add-Result -Description $Description -Status "Error" -Details "Could not find built-in administrator account"
+        } else {
+            if ($adminAccount.Name -eq "Administrator") {
+                Add-Result -Description $Description -Status "Not Applied" -Details "Built-in administrator account not renamed"
+            } else {
+                Add-Result -Description $Description -Status "Applied" -Details "Built-in administrator account renamed to: $($adminAccount.Name)"
+            }
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking admin account: $_"
+    }
+}
+
+# Function to check if guest account is disabled
+function Check-GuestDisabled {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # Use WMI to find built-in guest account (SID ending in 501)
+        $guestAccount = Get-WmiObject -Class Win32_UserAccount -Filter "LocalAccount='True' AND SID LIKE '%-501'"
+        
+        if ($null -eq $guestAccount) {
+            Add-Result -Description $Description -Status "Error" -Details "Could not find built-in guest account"
+        } else {
+            if ($guestAccount.Disabled) {
+                Add-Result -Description $Description -Status "Applied" -Details "Guest account is disabled"
+            } else {
+                Add-Result -Description $Description -Status "Not Applied" -Details "Guest account is enabled"
+            }
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking guest account: $_"
+    }
+}
+
+# Function to check network adapters
+function Check-NetworkAdapters {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $adapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
+        $disabledAdapters = Get-NetAdapter | Where-Object { $_.Status -eq "Disabled" }
+        
+        if ($adapters.Count -eq 0) {
+            Add-Result -Description $Description -Status "Error" -Details "No network adapters are up (system would be inaccessible)"
+        } else {
+            $unusedAdapters = $adapters | Where-Object { $_.MediaConnectionState -eq "Disconnected" }
+            
+            if ($unusedAdapters.Count -eq 0) {
+                Add-Result -Description $Description -Status "Applied" -Details "No unused adapters found in 'Up' state"
+            } else {
+                Add-Result -Description $Description -Status "Not Applied" -Details "Found $($unusedAdapters.Count) disconnected adapters still enabled"
+            }
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking network adapters: $_"
+    }
+}
+
+# Function to check firewall status
+function Check-Firewall {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $firewallProfiles = Get-NetFirewallProfile
+        $enabledProfiles = $firewallProfiles | Where-Object { $_.Enabled -eq $true }
+        
+        if ($enabledProfiles.Count -eq $firewallProfiles.Count) {
+            Add-Result -Description $Description -Status "Applied" -Details "All firewall profiles are enabled"
+        } else {
+            $disabledProfiles = ($firewallProfiles | Where-Object { $_.Enabled -eq $false }).Name -join ", "
+            Add-Result -Description $Description -Status "Not Applied" -Details "Disabled profiles: $disabledProfiles"
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking firewall: $_"
+    }
+}
+
+# Function to check password policies
+function Check-PasswordPolicies {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # Use net accounts to get password policy
+        $passwordPolicyOutput = net accounts
+        
+        # Extract relevant settings using regex
+        $minLength = if ($passwordPolicyOutput -match "Minimum password length\s+:\s+(\d+)") { [int]$Matches[1] } else { 0 }
+        $maxAge = if ($passwordPolicyOutput -match "Maximum password age \(days\)\s+:\s+(\d+)") { [int]$Matches[1] } else { 0 }
+        $minAge = if ($passwordPolicyOutput -match "Minimum password age \(days\)\s+:\s+(\d+)") { [int]$Matches[1] } else { 0 }
+        $history = if ($passwordPolicyOutput -match "Length of password history maintained\s+:\s+(\d+)") { [int]$Matches[1] } else { 0 }
+        $lockoutThreshold = if ($passwordPolicyOutput -match "Lockout threshold\s+:\s+(\d+|Never)") { $Matches[1] } else { "Unknown" }
+        
+        # Check complexity using registry
+        $complexityPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+        $complexity = (Get-ItemProperty -Path $complexityPath -Name "PasswordComplexity" -ErrorAction SilentlyContinue).PasswordComplexity
+        $complexityStatus = if ($complexity -eq 1) { "Enabled" } else { "Disabled" }
+        
+        # Determine if policies meet requirements (adjust thresholds as needed)
+        $details = "Min Length: $minLength, Max Age: $maxAge, Min Age: $minAge, History: $history, Lockout: $lockoutThreshold, Complexity: $complexityStatus"
+        
+        if ($minLength -ge 12 -and $maxAge -le 90 -and $minAge -ge 1 -and $history -ge 5 -and $lockoutThreshold -ne "Never" -and $complexity -eq 1) {
+            Add-Result -Description $Description -Status "Applied" -Details $details
+        } else {
+            Add-Result -Description $Description -Status "Not Applied" -Details $details
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking password policies: $_"
+    }
+}
+
+# Function to check security software
+function Check-SecuritySoftware {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # Check for antivirus using multiple methods
+        $avFound = $false
+        $avName = "None"
+        
+        # Method 1: Check Windows Security Center
+        try {
+            $avProducts = Get-WmiObject -Namespace "root\SecurityCenter2" -Class AntiVirusProduct -ErrorAction SilentlyContinue
+            if ($null -ne $avProducts -and $avProducts.Count -gt 0) {
+                $avFound = $true
+                $avName = ($avProducts | ForEach-Object { $_.displayName }) -join ", "
+            }
+        } catch {
+            # Continue to next method if this fails
+        }
+        
+        # Method 2: Check Windows Defender status if no other AV found
+        if (-not $avFound) {
+            $defenderPath = "HKLM:\SOFTWARE\Microsoft\Windows Defender"
+            $defenderStatus = Get-ItemProperty -Path $defenderPath -ErrorAction SilentlyContinue
+            
+            if ($null -ne $defenderStatus) {
+                $avFound = $true
+                $avName = "Windows Defender"
+            }
+        }
+        
+        # Check for application whitelisting (AppLocker or WDAC)
+        $whitelistingFound = $false
+        $whitelistingName = "None"
+        
+        # Check AppLocker
+        $appLockerService = Get-Service -Name "AppIDSvc" -ErrorAction SilentlyContinue
+        $appLockerPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\SrpV2"
+        
+        if (($null -ne $appLockerService -and $appLockerService.Status -eq "Running") -or 
+            (Test-Path $appLockerPath)) {
+            $whitelistingFound = $true
+            $whitelistingName = "AppLocker"
+        }
+        
+        # Check WDAC (Windows Defender Application Control)
+        $wdacPolicies = Get-ChildItem -Path "C:\Windows\System32\CodeIntegrity\CiPolicies\Active\" -ErrorAction SilentlyContinue
+        if ($null -ne $wdacPolicies -and $wdacPolicies.Count -gt 0) {
+            $whitelistingFound = $true
+            $whitelistingName = "Windows Defender Application Control"
+        }
+        
+        if ($avFound -and $whitelistingFound) {
+            Add-Result -Description $Description -Status "Applied" -Details "AV: $avName, Application Whitelisting: $whitelistingName"
+        } else {
+            $missing = @()
+            if (-not $avFound) { $missing += "Antivirus" }
+            if (-not $whitelistingFound) { $missing += "Application Whitelisting" }
+            
+            Add-Result -Description $Description -Status "Not Applied" -Details "Missing: $($missing -join ", "). Found: AV: $avName, Whitelisting: $whitelistingName"
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking security software: $_"
+    }
+}
+
+# Function to check auditing policies
+function Check-AuditingPolicies {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # Use PowerShell to check audit policies
+        $categories = @(
+            "Account Logon",
+            "Account Management",
+            "Logon/Logoff",
+            "Object Access",
+            "Policy Change",
+            "Privilege Use",
+            "System"
+        )
+        
+        $missingPolicies = @()
+        
+        foreach ($category in $categories) {
+            $result = auditpol /get /category:$category 2>$null
+            if ($result -notmatch "Success and Failure") {
+                $missingPolicies += $category
+            }
+        }
+        
+        if ($missingPolicies.Count -eq 0) {
+            Add-Result -Description $Description -Status "Applied" -Details "All required audit policies are configured"
+        } else {
+            Add-Result -Description $Description -Status "Not Applied" -Details "Missing policies: $($missingPolicies -join ', ')"
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking audit policies: $_"
+    }
+}
+
+# Function to check non-interactive service accounts
+function Check-ServiceAccounts {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $serviceAccounts = Get-WmiObject -Class Win32_Service | 
+            Where-Object { $_.StartName -notmatch 'LocalSystem|NT AUTHORITY|NT SERVICE' -and $_.StartName -ne "" } | 
+            Select-Object DisplayName, StartName
+        
+        if ($serviceAccounts.Count -eq 0) {
+            Add-Result -Description $Description -Status "Not Applicable" -Details "No custom service accounts found"
+        } else {
+            # Check if these accounts are in the "Deny log on locally" security setting
+            $denyLogonPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+            $denyLogonAccounts = (Get-ItemProperty -Path $denyLogonPath -Name "DenyLogonLocallyName" -ErrorAction SilentlyContinue).DenyLogonLocallyName
+            
+            $nonCompliantAccounts = @()
+            foreach ($account in $serviceAccounts) {
+                $accountName = ($account.StartName -split '\\')[-1]
+                if ($null -eq $denyLogonAccounts -or $denyLogonAccounts -notcontains $accountName) {
+                    $nonCompliantAccounts += "$($account.DisplayName) ($($account.StartName))"
+                }
+            }
+            
+            if ($nonCompliantAccounts.Count -eq 0) {
+                Add-Result -Description $Description -Status "Applied" -Details "All service accounts are restricted from interactive login"
+            } else {
+                Add-Result -Description $Description -Status "Not Applied" -Details "Service accounts not restricted: $($nonCompliantAccounts -join ", ")"
+            }
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking service accounts: $_"
+    }
+}
+
+# Function to check NTP configuration
+function Check-NTPConfiguration {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # Check Windows Time service
+        $timeService = Get-Service -Name "W32Time" -ErrorAction SilentlyContinue
+        
+        # Get NTP settings using registry
+        $ntpParams = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters" -ErrorAction SilentlyContinue
+        $ntpConfig = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Config" -ErrorAction SilentlyContinue
+        
+        $details = @()
+        
+        # Check service status
+        if ($timeService) {
+            $details += "Service Status: $($timeService.Status)"
+        } else {
+            $details += "Service Status: Not Found"
+        }
+        
+        # Check NTP server
+        if ($ntpParams.NtpServer) {
+            $details += "NTP Server: $($ntpParams.NtpServer)"
+        } else {
+            $details += "NTP Server: Not Configured"
+        }
+        
+        # Check sync type
+        if ($ntpParams.Type) {
+            $details += "Sync Type: $($ntpParams.Type)"
+        }
+        
+        # Get current time source
+        $w32tmStatus = w32tm /query /status /verbose 2>$null
+        if ($w32tmStatus) {
+            $source = ($w32tmStatus | Select-String "Source:.*").ToString()
+            if ($source) {
+                $details += $source
+            }
+        }
+        
+        if ($timeService.Status -eq 'Running' -and $ntpParams.NtpServer) {
+            Add-Result -Description $Description -Status "Applied" -Details ($details -join ", ")
+        } else {
+            Add-Result -Description $Description -Status "Not Applied" -Details ($details -join ", ")
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking NTP: $_"
+    }
+}
+
+# Function to check User Account Control settings via registry
+function Check-UACSettings {
+    param (
+        [string]$Description,
+        [string]$RegistryName,
+        [int]$ExpectedValue
+    )
+    
+    try {
+        $uacPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+        $actualValue = (Get-ItemProperty -Path $uacPath -Name $RegistryName -ErrorAction SilentlyContinue).$RegistryName
+        
+        if ($null -eq $actualValue) {
+            Add-Result -Description $Description -Status "Not Found" -Details "Setting not found in registry"
+        } else {
+            $details = "Expected: $ExpectedValue, Found: $actualValue"
+            
+            if ($actualValue -eq $ExpectedValue) {
+                Add-Result -Description $Description -Status "Applied" -Details $details
+            } else {
+                Add-Result -Description $Description -Status "Not Applied" -Details $details
+            }
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking UAC setting: $_"
+    }
+}
+
+# Function to check autorun settings
+function Check-AutorunSettings {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $autorunPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer"
+        $autorunValue = (Get-ItemProperty -Path $autorunPath -Name "NoDriveTypeAutoRun" -ErrorAction SilentlyContinue).NoDriveTypeAutoRun
+        
+        if ($null -eq $autorunValue) {
+            Add-Result -Description $Description -Status "Not Found" -Details "Autorun setting not found in registry"
+        } else {
+            $details = "Expected: 255 (all drives), Found: $autorunValue"
+            
+            if ($autorunValue -eq 255) {
+                Add-Result -Description $Description -Status "Applied" -Details $details
+            } else {
+                Add-Result -Description $Description -Status "Not Applied" -Details $details
+            }
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking autorun settings: $_"
+    }
+}
+
+# Run all checks
+Write-Host "Running security configuration checks..."
+
+# 1. Programs and Services
+Check-UnnecessaryPrograms -Description "Remove all unnecessary programs and applications"
+Check-ServiceDisabled -ServiceName "TlntSvr" -Description "Disable Telnet service"
+Check-ServiceDisabled -ServiceName "Tftpd" -Description "Disable TFTP service"
+Check-ServiceDisabled -ServiceName "RemoteRegistry" -Description "Disable Remote Registry service"
+
+# 2. User Account Controls
+Check-UserAccounts -Description "Configure standard user accounts" -AccountType "Standard"
+Check-UserAccounts -Description "Configure administrator accounts" -AccountType "Admin"
+Check-AdminRenamed -Description "Rename built-in administrator account"
+Check-GuestDisabled -Description "Disable built-in guest account"
+Check-ServiceAccounts -Description "Configure non-human service accounts to disallow interactive logins"
+
+# 3. Security Software and Settings
+Check-SecuritySoftware -Description "Deploy and configure security software"
+Check-AuditingPolicies -Description "Configure auditing and logging"
+Check-PasswordPolicies -Description "Configure password policies"
+Check-NTPConfiguration -Description "Configure NTP"
+
+# 4. Device and Media Controls
+Check-USBStorageRestrictions -Description "Disable USB ports for standard users"
+Check-CDROMRestrictions -Description "Disable CD-ROM drives for standard users"
+Check-AutorunSettings -Description "Disable 'Autorun' capability for all external media"
+
+# 5. Network Security
+Check-Firewall -Description "Enable and configure Windows firewall"
+Check-NetworkAdapters -Description "Disable unused network adapters"
+
+# 6. UAC Settings
+Check-UACSettings -Description "Enable UAC" -RegistryName "EnableLUA" -ExpectedValue 1
+Check-UACSettings -Description "Set UAC to highest level" -RegistryName "ConsentPromptBehaviorAdmin" -ExpectedValue 2
+Check-UACSettings -Description "Enable secure desktop" -RegistryName "PromptOnSecureDesktop" -ExpectedValue 1
+
+# Calculate compliance percentage
+$compliancePercentage = [math]::Round(($passedChecks / $totalChecks) * 100, 2)
+
+# Build the report
+$reportHeader = @"
+# Windows Security Configuration Check Report
+Generated on: $(Get-Date)
+
+## Summary
+- Total checks: $totalChecks
+- Passed checks: $passedChecks
+- Compliance: $compliancePercentage%
+
+## Detailed Results
+"@
+
+$detailedResults = foreach ($result in $results) {
+    "### $($result.Description)`n" +
+    "**Status:** $($result.Status)`n" +
+    "**Details:** $($result.Details)`n"
+}
+
+$report = $reportHeader + "`n`n" + ($detailedResults -join "`n")
+
+# Save the results
+$report | Out-File -FilePath $resultsFile -Encoding utf8
+
+# Clean up temporary files
+Remove-Item -Path $auditpolFile -Force -ErrorAction SilentlyContinue
+
+Write-Host "Security check completed. Results saved to: $resultsFile"
+Write-Host "Compliance Score: $compliancePercentage% ($passedChecks/$totalChecks checks passed)"
