@@ -720,29 +720,25 @@ function Check-InteractiveLogonPolicy {
     )
     
     try {
-        # Use secedit to export security policy
-        $tempFile = "C:\Windows\Temp\secedit_security.txt"
-        secedit /export /areas SECURITYPOLICY /cfg $tempFile | Out-Null
+        # Convert registry path to proper format
+        $regPath = $PolicyName -replace '^MACHINE\\', 'HKLM:\\'
         
-        if (Test-Path $tempFile) {
-            $content = Get-Content -Path $tempFile -Raw
+        # Get the registry value directly instead of using secedit
+        try {
+            $keyPath = Split-Path -Path $regPath
+            $valueName = Split-Path -Path $regPath -Leaf
             
-            if ($content -match "$PolicyName\s*=\s*(.+)") {
-                $actualValue = $matches[1].Trim()
-                $details = "Expected: $ExpectedValue, Found: $actualValue"
-                
-                if ($actualValue -eq $ExpectedValue) {
-                    Add-Result -Description $Description -Status "Applied" -Details $details
-                } else {
-                    Add-Result -Description $Description -Status "Not Applied" -Details $details
-                }
+            $actualValue = (Get-ItemProperty -Path $keyPath -Name $valueName -ErrorAction Stop).$valueName
+            $details = "Expected: $ExpectedValue, Found: $actualValue"
+            
+            if ($actualValue.ToString() -eq $ExpectedValue) {
+                Add-Result -Description $Description -Status "Applied" -Details $details
             } else {
-                Add-Result -Description $Description -Status "Not Found" -Details "Policy not found in security configuration"
+                Add-Result -Description $Description -Status "Not Applied" -Details $details
             }
-            
-            Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
-        } else {
-            Add-Result -Description $Description -Status "Error" -Details "Failed to export security policy"
+        }
+        catch {
+            Add-Result -Description $Description -Status "Not Found" -Details "Policy setting not found in registry"
         }
     } catch {
         Add-Result -Description $Description -Status "Error" -Details "Error checking security policy: $_"
@@ -924,6 +920,204 @@ function Check-LogonBanner {
     }
 }
 
+# Function to check network security settings
+function Check-NetworkSecuritySettings {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $securityPath = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
+        $ntlmPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0"
+        
+        # Check digital signing
+        $requireSign = (Get-ItemProperty -Path $securityPath -Name "RequireSecuritySignature" -ErrorAction SilentlyContinue).RequireSecuritySignature
+        
+        # Check NTLM SSP security
+        $ntlmSecurity = (Get-ItemProperty -Path $ntlmPath -Name "NTLMMinClientSec" -ErrorAction SilentlyContinue).NTLMMinClientSec
+        
+        $details = @()
+        $details += "Digital Signing Required: $($requireSign -eq 1)"
+        $details += "NTLM Min Security: $ntlmSecurity"
+        
+        if ($requireSign -eq 1 -and $ntlmSecurity -ge 537395200) {
+            Add-Result -Description $Description -Status "Applied" -Details ($details -join ", ")
+        } else {
+            Add-Result -Description $Description -Status "Not Applied" -Details ($details -join ", ")
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking network security settings: $_"
+    }
+}
+
+# Function to check device installation settings
+function Check-DeviceInstallationSettings {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $devicePath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions"
+        
+        $adminOverride = (Get-ItemProperty -Path $devicePath -Name "AllowAdminInstall" -ErrorAction SilentlyContinue).AllowAdminInstall
+        $customMessage = (Get-ItemProperty -Path $devicePath -Name "DenyMessageText" -ErrorAction SilentlyContinue).DenyMessageText
+        $customTitle = (Get-ItemProperty -Path $devicePath -Name "DenyMessageTitle" -ErrorAction SilentlyContinue).DenyMessageTitle
+        
+        $details = @(
+            "Admin Override: $($adminOverride -eq 1)",
+            "Custom Message Configured: $(-not [string]::IsNullOrEmpty($customMessage))",
+            "Custom Title Configured: $(-not [string]::IsNullOrEmpty($customTitle))"
+        )
+        
+        if ($adminOverride -eq 1 -and -not [string]::IsNullOrEmpty($customMessage) -and -not [string]::IsNullOrEmpty($customTitle)) {
+            Add-Result -Description $Description -Status "Applied" -Details ($details -join ", ")
+        } else {
+            Add-Result -Description $Description -Status "Not Applied" -Details ($details -join ", ")
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking device installation settings: $_"
+    }
+}
+
+# Function to check removable storage access
+function Check-RemovableStorageAccess {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $storagePath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices"
+        
+        $denyAll = (Get-ItemProperty -Path "$storagePath\Deny_All" -Name "Deny" -ErrorAction SilentlyContinue).Deny
+        $denyExecute = (Get-ItemProperty -Path "$storagePath\Deny_Execute" -Name "Deny" -ErrorAction SilentlyContinue).Deny
+        $denyCDDVD = (Get-ItemProperty -Path "$storagePath\CD_DVD" -Name "Deny" -ErrorAction SilentlyContinue).Deny
+        
+        $details = @(
+            "All Access Denied: $($denyAll -eq 1)",
+            "Execute Denied: $($denyExecute -eq 1)",
+            "CD/DVD Denied: $($denyCDDVD -eq 1)"
+        )
+        
+        if ($denyAll -eq 1 -and $denyExecute -eq 1 -and $denyCDDVD -eq 1) {
+            Add-Result -Description $Description -Status "Applied" -Details ($details -join ", ")
+        } else {
+            Add-Result -Description $Description -Status "Not Applied" -Details ($details -join ", ")
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking removable storage settings: $_"
+    }
+}
+
+# Function to check network settings
+function Check-NetworkSettings {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # Check LLMNR setting
+        $llmnrPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient"
+        $llmnrDisabled = (Get-ItemProperty -Path $llmnrPath -Name "EnableMulticast" -ErrorAction SilentlyContinue).EnableMulticast -eq 0
+        
+        # Check Remote Assistance
+        $raPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Remote Assistance"
+        $raDisabled = (Get-ItemProperty -Path $raPath -Name "fAllowToGetHelp" -ErrorAction SilentlyContinue).fAllowToGetHelp -eq 0
+        
+        # Check IPv6
+        $adapters = Get-NetAdapter | Where-Object Status -eq "Up"
+        $ipv6Disabled = $true
+        foreach ($adapter in $adapters) {
+            if ((Get-NetAdapterBinding -InterfaceAlias $adapter.Name -ComponentID "ms_tcpip6").Enabled) {
+                $ipv6Disabled = $false
+                break
+            }
+        }
+        
+        # Check NetBIOS
+        $netbiosDisabled = $true
+        foreach ($adapter in $adapters) {
+            $netbiosSetting = Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object { $_.Index -eq $adapter.ifIndex }
+            if ($netbiosSetting.TcpipNetbiosOptions -ne 2) {
+                $netbiosDisabled = $false
+                break
+            }
+        }
+        
+        $details = @(
+            "LLMNR Disabled: $llmnrDisabled",
+            "Remote Assistance Disabled: $raDisabled",
+            "IPv6 Disabled: $ipv6Disabled",
+            "NetBIOS Disabled: $netbiosDisabled"
+        )
+        
+        if ($llmnrDisabled -and $raDisabled -and $ipv6Disabled -and $netbiosDisabled) {
+            Add-Result -Description $Description -Status "Applied" -Details ($details -join ", ")
+        } else {
+            Add-Result -Description $Description -Status "Not Applied" -Details ($details -join ", ")
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking network settings: $_"
+    }
+}
+
+# Function to check PowerShell settings
+function Check-PowerShellSettings {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $psPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell"
+        
+        # Check Module Logging
+        $moduleLogging = (Get-ItemProperty -Path "$psPath\ModuleLogging" -Name "EnableModuleLogging" -ErrorAction SilentlyContinue).EnableModuleLogging
+        
+        # Check Script Block Logging
+        $scriptBlockLogging = (Get-ItemProperty -Path "$psPath\ScriptBlockLogging" -Name "EnableScriptBlockLogging" -ErrorAction SilentlyContinue).EnableScriptBlockLogging
+        
+        # Check Transcription
+        $transcription = (Get-ItemProperty -Path "$psPath\Transcription" -Name "EnableTranscripting" -ErrorAction SilentlyContinue).EnableTranscripting
+        
+        # Check PSLockdownPolicy
+        $lockdownPolicy = [Environment]::GetEnvironmentVariable("PSLockdownPolicy", "Machine")
+        
+        $details = @(
+            "Module Logging: $($moduleLogging -eq 1)",
+            "Script Block Logging: $($scriptBlockLogging -eq 1)",
+            "Transcription: $($transcription -eq 1)",
+            "Lockdown Policy: $lockdownPolicy"
+        )
+        
+        if ($moduleLogging -eq 1 -and $scriptBlockLogging -eq 1 -and $transcription -eq 1 -and $lockdownPolicy -eq 4) {
+            Add-Result -Description $Description -Status "Applied" -Details ($details -join ", ")
+        } else {
+            Add-Result -Description $Description -Status "Not Applied" -Details ($details -join ", ")
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking PowerShell settings: $_"
+    }
+}
+
+# Function to check SMB settings
+function Check-SMBSettings {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $smbPath = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters"
+        $smbv1Enabled = (Get-ItemProperty -Path $smbPath -Name "SMB1" -ErrorAction SilentlyContinue).SMB1
+        
+        if ($null -eq $smbv1Enabled -or $smbv1Enabled -eq 0) {
+            Add-Result -Description $Description -Status "Applied" -Details "SMB v1 is disabled"
+        } else {
+            Add-Result -Description $Description -Status "Not Applied" -Details "SMB v1 is enabled"
+        }
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking SMB settings: $_"
+    }
+}
+
 # Run all checks
 Write-Host "Running security configuration checks..."
 
@@ -989,6 +1183,32 @@ Check-UserRightAssignment -RightName "SeTcbPrivilege" -Description "Remove the '
 Check-UserRightAssignment -RightName "SeDebugPrivilege" -Description "Remove the 'Debug programs' right from all accounts unless necessary" -AllowedAccounts @("*S-1-5-32-544") # Only Administrators
 Check-UserRightAssignment -RightName "SeNetworkLogonRight" -Description "Restrict 'Access this computer from the network' right" -AllowedAccounts @("*S-1-5-32-544", "*S-1-5-32-545") # Admins and Users
 Check-UserRightAssignment -RightName "SeRemoteShutdownPrivilege" -Description "Restrict the 'Force Shutdown from a Remote System' policy to administrators" -AllowedAccounts @("*S-1-5-32-544") # Only Administrators
+
+# Network Security Settings
+Check-NetworkSecuritySettings -Description "Check network security settings"
+
+# Device Installation Settings
+Check-DeviceInstallationSettings -Description "Check device installation settings"
+
+# Removable Storage Access
+Check-RemovableStorageAccess -Description "Check removable storage access"
+
+# Network Settings
+Check-NetworkSettings -Description "Check network settings"
+
+# PowerShell Settings
+Check-PowerShellSettings -Description "Check PowerShell settings"
+
+# SMB Settings
+Check-SMBSettings -Description "Check SMB settings"
+
+# Add these lines after your existing checks
+Check-NetworkSecuritySettings -Description "Network Security - Digital Signing and NTLM SSP Settings"
+Check-DeviceInstallationSettings -Description "Device Installation Policies"
+Check-RemovableStorageAccess -Description "Removable Storage Access Restrictions"
+Check-NetworkSettings -Description "Network Settings (LLMNR, Remote Assistance, IPv6, NetBIOS)"
+Check-PowerShellSettings -Description "PowerShell Security Settings"
+Check-SMBSettings -Description "SMB Version 1 Status"
 
 # Calculate compliance percentage
 $compliancePercentage = [math]::Round(($passedChecks / $totalChecks) * 100, 2)
