@@ -1118,6 +1118,133 @@ function Check-SMBSettings {
     }
 }
 
+# Function to check additional security settings
+function Check-AdditionalSecuritySettings {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $results = @()
+        
+        # Check Internet resource contact settings
+        $internetSettings = @{
+            "HKLM:\Software\Policies\Microsoft\Windows\NetworkProvider\HardenedPaths" = "RequireMutualAuthentication=1, RequireIntegrity=1"
+            "HKLM:\Software\Policies\Microsoft\Windows NT\Terminal Services\Client" = "fEnableInternetPrinting=0"
+            "HKLM:\Software\Policies\Microsoft\Windows\DriverSearching" = "SearchOrderConfig=0"
+        }
+        
+        # Machine account and secure channel settings
+        $secureChannelPath = "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters"
+        $regSettings = @{
+            "RefusePasswordChange" = 1
+            "RequireSignOrSeal" = 1
+            "RequireStrongKey" = 1
+        }
+        
+        # System and security settings
+        $systemPoliciesPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+        $systemSettings = @{
+            "ShutdownWithoutLogon" = 0
+            "ConsentPromptBehaviorUser" = 0
+            "EnableFontProviders" = 0
+        }
+        
+        # Network and Group Policy settings
+        $networkSettingsPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\NetworkConnections"
+        $networkSettings = @{
+            "NC_ShowSharedAccessUI" = 0
+            "NC_StdDomainUserSetLocation" = 1
+        }
+        
+        # LLTD settings
+        $lltdPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LLTD"
+        $lltdSettings = @{
+            "AllowLLTDIO" = 0
+            "AllowRspndr" = 0
+        }
+        
+        # HTTP and print settings
+        $printPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers"
+        $printSettings = @{
+            "DisableWebPnPDownload" = 1
+            "DisableHTTPPrinting" = 1
+            "RestrictDriverInstallationToAdministrators" = 1
+        }
+        
+        # Point and Print restrictions
+        $pointPrintPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers\PointAndPrint"
+        $pointPrintSettings = @{
+            "NoWarningNoElevationOnInstall" = 0
+            "UpdatePromptSettings" = 0
+            "RestrictDriverInstallationToAdministrators" = 1
+        }
+        
+        # Microsoft connection settings
+        $msConnectionPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Internet Connection Wizard"
+        $msSettings = @{
+            "ExitOnMSICW" = 1
+            "DownloadFilesDemand" = 0
+        }
+        
+        # Check each setting
+        foreach ($setting in $regSettings.GetEnumerator()) {
+            $value = Get-ItemProperty -Path $secureChannelPath -Name $setting.Key -ErrorAction SilentlyContinue
+            if ($value -eq $setting.Value) {
+                $results += "✓ $($setting.Key) is properly configured"
+            } else {
+                $results += "✗ $($setting.Key) is not properly configured"
+            }
+        }
+        
+        # Check additional settings
+        $checks = @(
+            @{
+                Path = $systemPoliciesPath
+                Name = "ShutdownWithoutLogon"
+                Expected = 0
+                Description = "System shutdown without logon"
+            },
+            @{
+                Path = $lltdPath
+                Name = "AllowLLTDIO"
+                Expected = 0
+                Description = "LLTDIO driver"
+            },
+            @{
+                Path = $lltdPath
+                Name = "AllowRspndr"
+                Expected = 0
+                Description = "RSPNDR driver"
+            },
+            @{
+                Path = $printPath
+                Name = "DisableWebPnPDownload"
+                Expected = 1
+                Description = "Web PnP download"
+            }
+        )
+        
+        foreach ($check in $checks) {
+            $value = Get-ItemProperty -Path $check.Path -Name $check.Name -ErrorAction SilentlyContinue
+            if ($value -eq $check.Expected) {
+                $results += "✓ $($check.Description) is properly configured"
+            } else {
+                $results += "✗ $($check.Description) is not properly configured"
+            }
+        }
+        
+        if ($results.Where({$_ -match "✗"}).Count -eq 0) {
+            Add-Result -Description $Description -Status "Applied" -Details ($results -join ", ")
+        } else {
+            Add-Result -Description $Description -Status "Not Applied" -Details ($results -join ", ")
+        }
+        
+    } catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking additional security settings: $_"
+    }
+}
+
 # Run all checks
 Write-Host "Running security configuration checks..."
 
@@ -1209,6 +1336,22 @@ Check-RemovableStorageAccess -Description "Removable Storage Access Restrictions
 Check-NetworkSettings -Description "Network Settings (LLMNR, Remote Assistance, IPv6, NetBIOS)"
 Check-PowerShellSettings -Description "PowerShell Security Settings"
 Check-SMBSettings -Description "SMB Version 1 Status"
+
+# Additional Security Settings
+Check-AdditionalSecuritySettings -Description "Additional Security Settings"
+
+# Add these to your existing checks section
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Group Policy\{35378EAC-683F-11D2-A89A-00C04FBBCFA2}" -Name "NoBackgroundPolicy" -ExpectedValue 0 -Description "Group Policy background refresh"
+
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers" -Name "DisableWebPnPDownload" -ExpectedValue 1 -Description "Print driver downloads over HTTP"
+
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DriverSearching" -Name "SearchOrderConfig" -ExpectedValue 0 -Description "Internet driver search"
+
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableFontProviders" -ExpectedValue 0 -Description "Font Providers"
+
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers\PointAndPrint" -Name "RestrictDriverInstallationToAdministrators" -ExpectedValue 1 -Description "Printer driver installation restrictions"
+
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Search" -Name "DisableWebSearch" -ExpectedValue 1 -Description "Search Companion updates"
 
 # Calculate compliance percentage
 $compliancePercentage = [math]::Round(($passedChecks / $totalChecks) * 100, 2)
