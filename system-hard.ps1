@@ -28,39 +28,7 @@ function Add-Result {
     $global:results += $result
 }
 
-# Function to check registry setting
-function Check-RegistrySetting {
-    param (
-        [string]$Path,
-        [string]$Name,
-        [object]$ExpectedValue,
-        [string]$Description
-    )
-    
-    try {
-        if (Test-Path -Path $Path) {
-            $value = Get-ItemProperty -Path $Path -Name $Name -ErrorAction SilentlyContinue
-            
-            if ($null -ne $value) {
-                $actualValue = $value.$Name
-                $details = "Expected: $ExpectedValue, Found: $actualValue"
-                
-                if ($actualValue -eq $ExpectedValue) {
-                    Add-Result -Description $Description -Status "Applied" -Details $details
-                } else {
-                    Add-Result -Description $Description -Status "Not Applied" -Details $details
-                }
-            } else {
-                Add-Result -Description $Description -Status "Not Found" -Details "Setting name not found in registry"
-            }
-        } else {
-            Add-Result -Description $Description -Status "Not Found" -Details "Registry path not found"
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking registry: $_"
-    }
-}
-
+#   
 # Function to check local security policy
 function Check-SecurityPolicy {
     param (
@@ -1140,6 +1108,7 @@ function Check-AdditionalSecuritySettings {
             "RefusePasswordChange" = 1
             "RequireSignOrSeal" = 1
             "RequireStrongKey" = 1
+            "SignSecureChannel" = 1
         }
         
         # System and security settings
@@ -1157,14 +1126,14 @@ function Check-AdditionalSecuritySettings {
             "NC_StdDomainUserSetLocation" = 1
         }
         
-        # LLTD settings
+        # LLTD settings (Mapper I/O and Responder)
         $lltdPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LLTD"
         $lltdSettings = @{
             "AllowLLTDIO" = 0
             "AllowRspndr" = 0
         }
         
-        # HTTP and print settings
+        # Print settings
         $printPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers"
         $printSettings = @{
             "DisableWebPnPDownload" = 1
@@ -1187,53 +1156,60 @@ function Check-AdditionalSecuritySettings {
             "DownloadFilesDemand" = 0
         }
         
-        # Check each setting
+        # Additional settings for registration and search companion
+        $extraSettings = @{
+            "HKLM:\Software\Policies\Microsoft\Windows\Registration Wizard Control" = @{ "NoRegistration" = 1 }
+            "HKLM:\Software\Policies\Microsoft\SearchCompanion" = @{ "DisableContentFileUpdates" = 1 }
+        }
+        
+        # Check registry values
+        function Check-RegistryValue {
+            param ($Path, $Key, $ExpectedValue)
+            
+            if (Test-Path $Path) {
+                $value = Get-ItemProperty -Path $Path -Name $Key -ErrorAction SilentlyContinue
+                if ($value.$Key -eq $ExpectedValue) {
+                    return "✓ $Key is properly configured"
+                } else {
+                    return "✗ $Key is NOT properly configured"
+                }
+            } else {
+                return "✗ Registry path $Path not found"
+            }
+        }
+        
+        # Process all settings
         foreach ($setting in $regSettings.GetEnumerator()) {
-            $value = Get-ItemProperty -Path $secureChannelPath -Name $setting.Key -ErrorAction SilentlyContinue
-            if ($value -eq $setting.Value) {
-                $results += "✓ $($setting.Key) is properly configured"
-            } else {
-                $results += "✗ $($setting.Key) is not properly configured"
+            $results += Check-RegistryValue -Path $secureChannelPath -Key $setting.Key -ExpectedValue $setting.Value
+        }
+        
+        foreach ($setting in $systemSettings.GetEnumerator()) {
+            $results += Check-RegistryValue -Path $systemPoliciesPath -Key $setting.Key -ExpectedValue $setting.Value
+        }
+        
+        foreach ($setting in $lltdSettings.GetEnumerator()) {
+            $results += Check-RegistryValue -Path $lltdPath -Key $setting.Key -ExpectedValue $setting.Value
+        }
+        
+        foreach ($setting in $printSettings.GetEnumerator()) {
+            $results += Check-RegistryValue -Path $printPath -Key $setting.Key -ExpectedValue $setting.Value
+        }
+        
+        foreach ($setting in $pointPrintSettings.GetEnumerator()) {
+            $results += Check-RegistryValue -Path $pointPrintPath -Key $setting.Key -ExpectedValue $setting.Value
+        }
+        
+        foreach ($setting in $msSettings.GetEnumerator()) {
+            $results += Check-RegistryValue -Path $msConnectionPath -Key $setting.Key -ExpectedValue $setting.Value
+        }
+        
+        foreach ($path in $extraSettings.Keys) {
+            foreach ($setting in $extraSettings[$path].GetEnumerator()) {
+                $results += Check-RegistryValue -Path $path -Key $setting.Key -ExpectedValue $setting.Value
             }
         }
         
-        # Check additional settings
-        $checks = @(
-            @{
-                Path = $systemPoliciesPath
-                Name = "ShutdownWithoutLogon"
-                Expected = 0
-                Description = "System shutdown without logon"
-            },
-            @{
-                Path = $lltdPath
-                Name = "AllowLLTDIO"
-                Expected = 0
-                Description = "LLTDIO driver"
-            },
-            @{
-                Path = $lltdPath
-                Name = "AllowRspndr"
-                Expected = 0
-                Description = "RSPNDR driver"
-            },
-            @{
-                Path = $printPath
-                Name = "DisableWebPnPDownload"
-                Expected = 1
-                Description = "Web PnP download"
-            }
-        )
-        
-        foreach ($check in $checks) {
-            $value = Get-ItemProperty -Path $check.Path -Name $check.Name -ErrorAction SilentlyContinue
-            if ($value -eq $check.Expected) {
-                $results += "✓ $($check.Description) is properly configured"
-            } else {
-                $results += "✗ $($check.Description) is not properly configured"
-            }
-        }
-        
+        # Determine status
         if ($results.Where({$_ -match "✗"}).Count -eq 0) {
             Add-Result -Description $Description -Status "Applied" -Details ($results -join ", ")
         } else {
