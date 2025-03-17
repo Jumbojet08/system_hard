@@ -1221,6 +1221,266 @@ function Check-AdditionalSecuritySettings {
     }
 }
 
+# Add this new function after the existing functions and before the "Run all checks" section
+
+function Check-AdditionalPolicySettings {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $checks = @{
+            # Picture Tasks and Publishing
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" = @{
+                "NoOnlinePrintsWizard" = @(1, "Turn off 'Order Prints' picture task")
+                "NoPublishingWizard" = @(1, "Turn off 'Publish to Web' task")
+            }
+            
+            # Customer Experience and Error Reporting
+            "HKLM:\SOFTWARE\Policies\Microsoft\Messenger\Client" = @{
+                "CEIP" = @(0, "Turn off Windows Messenger CEIP")
+            }
+            "HKLM:\SOFTWARE\Policies\Microsoft\SQMClient\Windows" = @{
+                "CEIPEnable" = @(0, "Turn off Windows CEIP")
+            }
+            "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting" = @{
+                "Disabled" = @(1, "Turn off Windows Error Reporting")
+            }
+            
+            # Authentication and Security
+            "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" = @{
+                "EnableSecuritySignature" = @(1, "Support device authentication using certificate")
+            }
+            
+            # Lock Screen and Sign-in
+            "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" = @{
+                "DisableLockScreenAppNotifications" = @(1, "Turn off app notifications on lock screen")
+                "BlockDomainPicturePassword" = @(1, "Turn off picture password sign-in")
+                "AllowDomainPINLogon" = @(0, "Turn off convenience PIN sign-in")
+            }
+            
+            # Windows Time Service
+            "HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters" = @{
+                "Type" = @("NTP", "Enable Windows NTP Client")
+            }
+            
+            # App and Account Settings
+            "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\AppModel\StateManager" = @{
+                "AllowSharedLocalAppData" = @(0, "Disable app data sharing between users")
+            }
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" = @{
+                "MSAOptional" = @(1, "Allow Microsoft accounts to be optional")
+                "DisablePasswordReveal" = @(1, "Do not display password reveal button")
+            }
+            
+            # Remote Desktop Settings
+            "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" = @{
+                "fDisableCcm" = @(1, "Do not allow COM port redirection")
+                "fPromptForPassword" = @(1, "Always prompt for password upon connection")
+            }
+        }
+        
+        $results = @()
+        $allPassed = $true
+        
+        foreach ($path in $checks.Keys) {
+            foreach ($setting in $checks[$path].GetEnumerator()) {
+                $keyName = $setting.Key
+                $expectedValue = $setting.Value[0]
+                $settingDescription = $setting.Value[1]
+                
+                if (Test-Path $path) {
+                    $actualValue = (Get-ItemProperty -Path $path -Name $keyName -ErrorAction SilentlyContinue).$keyName
+                    if ($null -eq $actualValue) {
+                        $results += "✗ $settingDescription - Setting not found"
+                        $allPassed = $false
+                    }
+                    elseif ($actualValue -eq $expectedValue) {
+                        $results += "✓ $settingDescription"
+                    }
+                    else {
+                        $results += "✗ $settingDescription - Expected: $expectedValue, Found: $actualValue"
+                        $allPassed = $false
+                    }
+                }
+                else {
+                    $results += "✗ $settingDescription - Registry path not found"
+                    $allPassed = $false
+                }
+            }
+        }
+        
+        if ($allPassed) {
+            Add-Result -Description $Description -Status "Applied" -Details ($results -join "; ")
+        }
+        else {
+            Add-Result -Description $Description -Status "Not Applied" -Details ($results -join "; ")
+        }
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking additional policy settings: $_"
+    }
+}
+
+# Add this new function to check additional security settings
+
+function Check-ExtendedSecuritySettings {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $checks = @{
+            # Remote Desktop Settings
+            "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" = @{
+                "fDisablePNPRedir" = @(1, "Do not allow supported Plug and Play device redirection")
+                "fEncryptRPCTraffic" = @(1, "Require secure RPC communication")
+                "DeleteTempDirsOnExit" = @(0, "Do not delete temp folders upon exit")
+                "PerSessionTempDir" = @(0, "Do not use temporary folders per session")
+                "fPromptForPassword" = @(1, "Do not allow passwords to be saved")
+                "MaxIdleTime" = @(900000, "Set time limit for active but idle RDS sessions (15 mins)")
+            }
+            
+            # Windows Defender and Security Features
+            "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Spyware" = @{
+                "SubmitSamplesConsent" = @(0, "Disable Join Microsoft MAPS")
+            }
+            
+            # Windows Ink Settings
+            "HKLM:\SOFTWARE\Policies\Microsoft\WindowsInkWorkspace" = @{
+                "AllowSuggestedAppsInWindowsInkWorkspace" = @(0, "Disable suggested apps in Windows Ink Workspace")
+                "AllowWindowsInkWorkspace" = @(0, "Disable Windows Ink Workspace")
+            }
+            
+            # Media Settings
+            "HKLM:\SOFTWARE\Policies\Microsoft\WindowsMediaPlayer" = @{
+                "PreventCodecDownload" = @(1, "Prevent Codec Download")
+            }
+            
+            # Explorer and Shell Settings
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" = @{
+                "NoAutoplayfornonVolume" = @(1, "Disable drive redirection by default")
+                "NoDriveTypeAutoRun" = @(255, "Disable Autorun for all drives")
+            }
+            
+            # Recycle Bin Settings
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\BitBucket" = @{
+                "RetentionPeriod" = @(7, "Set Recycle Bin retention to 7 days")
+            }
+            
+            # UAC Settings
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" = @{
+                "EnumerateAdministrators" = @(0, "Disable Enumerate administrator accounts on elevation")
+            }
+            
+            # Internet Explorer Settings
+            "HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main" = @{
+                "DisableFirstRunCustomize" = @(1, "Disable Internet Explorer first run customization")
+            }
+            
+            # Smart Screen Settings
+            "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" = @{
+                "EnableSmartScreen" = @(1, "Enable Smart Screen")
+                "ShellSmartScreenLevel" = @("Block", "Set Smart Screen to block mode")
+            }
+            
+            # FTP Settings
+            "HKLM:\SYSTEM\CurrentControlSet\Services\FTPSVC" = @{
+                "Start" = @(4, "Disable Anonymous FTP")
+            }
+        }
+        
+        $results = @()
+        $allPassed = $true
+        
+        foreach ($path in $checks.Keys) {
+            foreach ($setting in $checks[$path].GetEnumerator()) {
+                $keyName = $setting.Key
+                $expectedValue = $setting.Value[0]
+                $settingDescription = $setting.Value[1]
+                
+                if (Test-Path $path) {
+                    $actualValue = (Get-ItemProperty -Path $path -Name $keyName -ErrorAction SilentlyContinue).$keyName
+                    if ($null -eq $actualValue) {
+                        $results += "✗ $settingDescription - Setting not found"
+                        $allPassed = $false
+                    }
+                    elseif ($actualValue -eq $expectedValue) {
+                        $results += "✓ $settingDescription"
+                    }
+                    else {
+                        $results += "✗ $settingDescription - Expected: $expectedValue, Found: $actualValue"
+                        $allPassed = $false
+                    }
+                }
+                else {
+                    $results += "✗ $settingDescription - Registry path not found"
+                    $allPassed = $false
+                }
+            }
+        }
+        
+        # Additional check for IE installation on operator workstations
+        $computerRole = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty PCSystemType
+        if ($computerRole -eq 2) { # Workstation
+            $ieVersion = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Internet Explorer" -Name Version -ErrorAction SilentlyContinue
+            if ($null -ne $ieVersion) {
+                $results += "✗ Internet Explorer should be disabled on operator workstations"
+                $allPassed = $false
+            }
+            else {
+                $results += "✓ Internet Explorer is not installed on operator workstation"
+            }
+        }
+        
+        if ($allPassed) {
+            Add-Result -Description $Description -Status "Applied" -Details ($results -join "; ")
+        }
+        else {
+            Add-Result -Description $Description -Status "Not Applied" -Details ($results -join "; ")
+        }
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking extended security settings: $_"
+    }
+}
+
+# Add this function before the "Run all checks" section
+function Check-RegistrySetting {
+    param (
+        [string]$Path,
+        [string]$Name,
+        [object]$ExpectedValue,
+        [string]$Description
+    )
+    
+    try {
+        if (Test-Path $Path) {
+            $actualValue = (Get-ItemProperty -Path $Path -Name $Name -ErrorAction SilentlyContinue).$Name
+            
+            if ($null -eq $actualValue) {
+                Add-Result -Description $Description -Status "Not Found" -Details "Registry value not found"
+            }
+            else {
+                $details = "Expected: $ExpectedValue, Found: $actualValue"
+                
+                if ($actualValue -eq $ExpectedValue) {
+                    Add-Result -Description $Description -Status "Applied" -Details $details
+                }
+                else {
+                    Add-Result -Description $Description -Status "Not Applied" -Details $details
+                }
+            }
+        }
+        else {
+            Add-Result -Description $Description -Status "Not Found" -Details "Registry path not found"
+        }
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking registry setting: $_"
+    }
+}
+
 # Run all checks
 Write-Host "Running security configuration checks..."
 
@@ -1316,18 +1576,46 @@ Check-SMBSettings -Description "SMB Version 1 Status"
 # Additional Security Settings
 Check-AdditionalSecuritySettings -Description "Additional Security Settings"
 
-# Add these to your existing checks section
-Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Group Policy\{35378EAC-683F-11D2-A89A-00C04FBBCFA2}" -Name "NoBackgroundPolicy" -ExpectedValue 0 -Description "Group Policy background refresh"
+# # Add these to your existing checks section
+# Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Group Policy\{35378EAC-683F-11D2-A89A-00C04FBBCFA2}" -Name "NoBackgroundPolicy" -ExpectedValue 0 -Description "Group Policy background refresh"
 
-Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers" -Name "DisableWebPnPDownload" -ExpectedValue 1 -Description "Print driver downloads over HTTP"
+# Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers" -Name "DisableWebPnPDownload" -ExpectedValue 1 -Description "Print driver downloads over HTTP"
 
-Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DriverSearching" -Name "SearchOrderConfig" -ExpectedValue 0 -Description "Internet driver search"
+# Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DriverSearching" -Name "SearchOrderConfig" -ExpectedValue 0 -Description "Internet driver search"
 
-Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableFontProviders" -ExpectedValue 0 -Description "Font Providers"
+# Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableFontProviders" -ExpectedValue 0 -Description "Font Providers"
 
-Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers\PointAndPrint" -Name "RestrictDriverInstallationToAdministrators" -ExpectedValue 1 -Description "Printer driver installation restrictions"
+# Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers\PointAndPrint" -Name "RestrictDriverInstallationToAdministrators" -ExpectedValue 1 -Description "Printer driver installation restrictions"
 
-Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Search" -Name "DisableWebSearch" -ExpectedValue 1 -Description "Search Companion updates"
+# Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Search" -Name "DisableWebSearch" -ExpectedValue 1 -Description "Search Companion updates"
+
+# Add this line in the "Run all checks" section, before the final compliance calculation
+Check-AdditionalPolicySettings -Description "Additional Security Policy Settings"
+
+# Add this line in the "Run all checks" section, before the compliance calculation
+Check-ExtendedSecuritySettings -Description "Extended Security Settings"
+
+# Add these checks to the $checks hashtable in Check-ExtendedSecuritySettings function
+$checks += @{
+    "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Group Policy\{35378EAC-683F-11D2-A89A-00C04FBBCFA2}" = @{
+        "NoBackgroundPolicy" = @(0, "Group Policy background refresh")
+    }
+    "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers" = @{
+        "DisableWebPnPDownload" = @(1, "Print driver downloads over HTTP")
+    }
+    "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DriverSearching" = @{
+        "SearchOrderConfig" = @(0, "Internet driver search")
+    }
+    "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" = @{
+        "EnableFontProviders" = @(0, "Font Providers")
+    }
+    "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers\PointAndPrint" = @{
+        "RestrictDriverInstallationToAdministrators" = @(1, "Printer driver installation restrictions")
+    }
+    "HKLM:\SOFTWARE\Policies\Microsoft\Search" = @{
+        "DisableWebSearch" = @(1, "Search Companion updates")
+    }
+}
 
 # Calculate compliance percentage
 $compliancePercentage = [math]::Round(($passedChecks / $totalChecks) * 100, 2)
