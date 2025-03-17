@@ -1,0 +1,170 @@
+#Requires -RunAsAdministrator
+#Requires -Version 5.1
+
+# Script to apply security hardening settings
+Write-Host "Starting security hardening process..." -ForegroundColor Green
+
+# Function to set registry value
+function Set-RegistryValue {
+    param (
+        [string]$Path,
+        [string]$Name,
+        [object]$Value,
+        [string]$Type = "DWORD"
+    )
+    
+    try {
+        if (-not (Test-Path $Path)) {
+            New-Item -Path $Path -Force | Out-Null
+        }
+        Set-ItemProperty -Path $Path -Name $Name -Value $Value -Type $Type -Force
+        Write-Host "Successfully set $Name to $Value" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "Failed to set $Name : $_" -ForegroundColor Red
+    }
+}
+
+# 1. Remote Desktop Settings
+$rdpPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
+@{
+    "fDisablePNPRedir" = 1  # Disable PnP device redirection
+    "fEncryptRPCTraffic" = 1  # Enable RPC encryption
+    "DeleteTempDirsOnExit" = 0  # Don't delete temp folders
+    "PerSessionTempDir" = 0  # Don't use per-session temp dirs
+    "fPromptForPassword" = 1  # Always prompt for password
+    "MaxIdleTime" = 900000  # 15 minutes idle timeout
+}.GetEnumerator() | ForEach-Object {
+    Set-RegistryValue -Path $rdpPath -Name $_.Key -Value $_.Value
+}
+
+# 2. Windows Defender Settings
+$defenderPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Spyware"
+Set-RegistryValue -Path $defenderPath -Name "SubmitSamplesConsent" -Value 0
+
+# 3. Windows Ink Settings
+$inkPath = "HKLM:\SOFTWARE\Policies\Microsoft\WindowsInkWorkspace"
+@{
+    "AllowSuggestedAppsInWindowsInkWorkspace" = 0
+    "AllowWindowsInkWorkspace" = 0
+}.GetEnumerator() | ForEach-Object {
+    Set-RegistryValue -Path $inkPath -Name $_.Key -Value $_.Value
+}
+
+# 4. Media Settings
+$mediaPath = "HKLM:\SOFTWARE\Policies\Microsoft\WindowsMediaPlayer"
+Set-RegistryValue -Path $mediaPath -Name "PreventCodecDownload" -Value 1
+
+# 5. Explorer Settings
+$explorerPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer"
+@{
+    "NoAutoplayfornonVolume" = 1
+    "NoDriveTypeAutoRun" = 255
+}.GetEnumerator() | ForEach-Object {
+    Set-RegistryValue -Path $explorerPath -Name $_.Key -Value $_.Value
+}
+
+# 6. Recycle Bin Settings
+$recyclePath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\BitBucket"
+Set-RegistryValue -Path $recyclePath -Name "RetentionPeriod" -Value 7
+
+# 7. UAC Settings
+$uacPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+@{
+    "EnableLUA" = 1
+    "ConsentPromptBehaviorAdmin" = 2
+    "PromptOnSecureDesktop" = 1
+    "EnumerateAdministrators" = 0
+}.GetEnumerator() | ForEach-Object {
+    Set-RegistryValue -Path $uacPath -Name $_.Key -Value $_.Value
+}
+
+# 8. Internet Explorer Settings
+if ($computerRole -eq 2) { # Check if workstation
+    # Disable IE features through Windows Features
+    Disable-WindowsOptionalFeature -Online -FeatureName "Internet-Explorer-Optional-amd64" -NoRestart
+} else {
+    $iePath = "HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main"
+    Set-RegistryValue -Path $iePath -Name "DisableFirstRunCustomize" -Value 1
+}
+
+# 9. Smart Screen Settings
+$smartScreenPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"
+@{
+    "EnableSmartScreen" = 1
+    "ShellSmartScreenLevel" = "Block"
+}.GetEnumerator() | ForEach-Object {
+    Set-RegistryValue -Path $smartScreenPath -Name $_.Key -Value $_.Value -Type $(if($_.Value -is [string]){"String"}else{"DWORD"})
+}
+
+# 10. FTP Settings
+Set-Service -Name "FTPSVC" -StartupType Disabled -ErrorAction SilentlyContinue
+Stop-Service -Name "FTPSVC" -Force -ErrorAction SilentlyContinue
+
+# 11. PowerShell Settings
+$psPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell"
+@{
+    "EnableScriptBlockLogging" = 1
+    "EnableTranscripting" = 1
+    "EnableModuleLogging" = 1
+}.GetEnumerator() | ForEach-Object {
+    Set-RegistryValue -Path "$psPath\ScriptBlockLogging" -Name $_.Key -Value $_.Value
+}
+
+# 12. SMB Settings
+Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force
+Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "SMB1" -Value 0 -Type DWORD
+
+# 13. Network Settings
+$networkPath = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters"
+Set-RegistryValue -Path $networkPath -Name "DisabledComponents" -Value 0xFF
+
+# Disable NetBIOS over TCP/IP
+$adapters = Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object {$_.IPEnabled -eq $true}
+foreach ($adapter in $adapters) {
+    $adapter.SetTcpipNetbios(2)  # 2 = Disable NetBIOS over TCP/IP
+}
+
+# 14. Service Configurations
+$servicesToDisable = @(
+    "TlntSvr",      # Telnet
+    "Tftpd",        # TFTP
+    "RemoteRegistry" # Remote Registry
+)
+
+foreach ($service in $servicesToDisable) {
+    Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
+    Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
+}
+
+# 15. Device Installation Settings
+$devicePath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions"
+@{
+    "DenyDeviceClasses" = 1
+    "DenyDeviceClassesRetroactive" = 1
+    "AllowAdminInstall" = 1
+}.GetEnumerator() | ForEach-Object {
+    Set-RegistryValue -Path $devicePath -Name $_.Key -Value $_.Value
+}
+
+# 16. Additional Security Settings
+$additionalSettings = @{
+    "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" = @{
+        "RestrictAnonymous" = 1
+        "RestrictAnonymousSAM" = 1
+        "LimitBlankPasswordUse" = 1
+    }
+    "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" = @{
+        "DisableCAD" = 0
+        "DontDisplayLastUserName" = 1
+    }
+}
+
+foreach ($path in $additionalSettings.Keys) {
+    foreach ($setting in $additionalSettings[$path].GetEnumerator()) {
+        Set-RegistryValue -Path $path -Name $setting.Key -Value $setting.Value
+    }
+}
+
+Write-Host "`nSecurity hardening completed. Please review the output for any errors." -ForegroundColor Green
+Write-Host "Note: A system restart may be required for some changes to take effect." -ForegroundColor Yellow
