@@ -2,10 +2,10 @@
 $uacPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
 
 try {
-    # Enable "Switch to the secure desktop when prompting for elevation"
-    Set-ItemProperty -Path $uacPath -Name "PromptOnSecureDesktop" -Value 1 -Type DWord -Force
+    # Enable "Virtualize file and registry write failures to per-user locations"
+    Set-ItemProperty -Path $uacPath -Name "EnableVirtualization" -Value 1 -Type DWord -Force
 
-    Write-Output "UAC setting 'Switch to the secure desktop when prompting for elevation' is now ENABLED."
+    Write-Output "UAC setting 'Virtualize file and registry write failures to per-user locations' is now ENABLED."
     Write-Output "A system restart may be required for changes to take effect."
 } catch {
     Write-Output "Failed to apply the setting: $_"

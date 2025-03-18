@@ -1,15 +1,15 @@
-# Enable Windows Firewall for all profiles
-Write-Output "Enabling Windows Firewall..."
-Set-NetFirewallProfile -Profile Domain, Private, Public -Enabled True
+# Registry path for UAC settings
+$uacPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
 
-# Block all inbound connections by default
-Write-Output "Blocking all inbound connections by default..."
-Set-NetFirewallProfile -Profile Domain, Private, Public -DefaultInboundAction Block
+try {
+    # Set elevation prompt behavior for administrators to "Prompt for consent on the secure desktop"
+    Set-ItemProperty -Path $uacPath -Name "ConsentPromptBehaviorAdmin" -Value 2 -Type DWord -Force
 
-# Allow all outbound connections by default (modify if needed)
-Write-Output "Allowing all outbound connections..."
-Set-NetFirewallProfile -Profile Domain, Private, Public -DefaultOutboundAction Allow
+    # Ensure the secure desktop is enabled for elevation prompts
+    Set-ItemProperty -Path $uacPath -Name "PromptOnSecureDesktop" -Value 1 -Type DWord -Force
 
-
-
-Write-Output "Firewall configuration completed."
+    Write-Output "UAC elevation prompt for administrators is now set to 'Prompt for consent on the secure desktop'."
+    Write-Output "A system restart may be required for changes to take effect."
+} catch {
+    Write-Output "Failed to apply UAC elevation prompt settings: $_"
+}

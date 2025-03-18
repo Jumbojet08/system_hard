@@ -1,11 +1,11 @@
-# Registry path for UAC settings
-$uacPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+# Registry path for secure logon settings
+$logonPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
 
 try {
-    # Enable "Virtualize file and registry write failures to per-user locations"
-    Set-ItemProperty -Path $uacPath -Name "EnableVirtualization" -Value 1 -Type DWord -Force
+    # Set "Do not require CTRL+ALT+DEL" to Disabled (0) to enforce secure logon
+    Set-ItemProperty -Path $logonPath -Name "DisableCAD" -Value 0 -Type DWord -Force
 
-    Write-Output "UAC setting 'Virtualize file and registry write failures to per-user locations' is now ENABLED."
+    Write-Output "Secure logon requirement (CTRL+ALT+DEL) is now ENABLED."
     Write-Output "A system restart may be required for changes to take effect."
 } catch {
     Write-Output "Failed to apply the setting: $_"
