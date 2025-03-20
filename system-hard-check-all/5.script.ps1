@@ -1,15 +1,3 @@
-﻿# Ensure script runs with admin privileges
-if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Output "This script must be run as an Administrator."
-    exit 1
-}
-
-# Log file location
-$logFile = "C:\Windows\Temp\USB_Block.log"
-
-# Ensure log directory exists
-if (!(Test-Path "C:\Windows\Temp")) { New-Item -Path "C:\Windows\Temp" -ItemType Directory -Force }
-
 # Registry path for USB storage control
 $usbStorageRegPath = "HKLM:\SYSTEM\CurrentControlSet\Services\USBSTOR"
 
