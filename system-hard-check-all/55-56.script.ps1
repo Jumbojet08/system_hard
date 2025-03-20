@@ -1,38 +1,29 @@
-# Enable Advanced Security Auditing
-$AuditCategories = @(
-    "Account Logon", "Account Management", "Logon/Logoff", "Object Access",
-    "Policy Change", "Privilege Use", "System", "Detailed Tracking"
-)
-foreach ($Category in $AuditCategories) { auditpol /set /category:"$Category" /success:enable /failure:enable }
+# Registry base path for Software Restriction Policies (SRP)
+$srpBasePath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Safer\CodeIdentifiers"
+$srpPaths = "$srpBasePath\262144\Paths"
 
-# Configure Event Log Retention & Size
-@("Security", "System", "Application") | ForEach-Object {
-    wevtutil sl $_ /rt:true
-    wevtutil sl $_ /ms:102400  # 100MB log size
+# Ensure the registry base path exists
+if (!(Test-Path $srpBasePath)) { New-Item -Path $srpBasePath -Force | Out-Null }
+if (!(Test-Path "$srpBasePath\262144")) { New-Item -Path "$srpBasePath\262144" -Force | Out-Null }
+if (!(Test-Path $srpPaths)) { New-Item -Path $srpPaths -Force | Out-Null }
+
+# Define paths to block
+$removableDrives = @("D:\*", "E:\*")
+
+# Ensure subkeys for each drive exist and apply SRP rules
+for ($i = 0; $i -lt $removableDrives.Count; $i++) {
+    $drivePath = "$srpPaths\$i"
+
+    if (!(Test-Path $drivePath)) {
+        New-Item -Path $drivePath -Force | Out-Null  # Create subkey if missing
+    }
+
+    # Set restriction properties
+    Set-ItemProperty -Path $drivePath -Name "ItemData" -Value $removableDrives[$i] -Type String
+    Set-ItemProperty -Path $drivePath -Name "SaferFlags" -Value 0x0 -Type DWord
 }
 
-# Enable PowerShell Logging (Script Block & Module Logging)
-$PSLoggingKeys = @(
-    "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging",
-    "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ModuleLogging",
-    "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\Transcription"
-)
+# Apply changes
+gpupdate /force
 
-foreach ($Key in $PSLoggingKeys) {
-    if (!(Test-Path $Key)) { New-Item -Path $Key -Force | Out-Null }
-    Set-ItemProperty -Path $Key -Name EnableScriptBlockLogging -Value 1 -Force
-    Set-ItemProperty -Path $Key -Name EnableModuleLogging -Value 1 -Force
-}
-
-# Disable Remote Assistance
-$RemoteAssistanceKey = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
-if (!(Test-Path $RemoteAssistanceKey)) { New-Item -Path $RemoteAssistanceKey -Force | Out-Null }
-Set-ItemProperty -Path $RemoteAssistanceKey -Name "fAllowUnsolicited" -Value 0 -Force
-Set-ItemProperty -Path $RemoteAssistanceKey -Name "fAllowToGetHelp" -Value 0 -Force
-
-# Backup Logs
-$logPath = "C:\Logs\AuditLogs"
-if (!(Test-Path $logPath)) { New-Item -ItemType Directory -Path $logPath | Out-Null }
-@("Security", "System", "Application") | ForEach-Object { wevtutil epl $_ "$logPath\$_-Log.evtx" }
-
-Write-Host "Auditing & logging configured successfully!" -ForegroundColor Green
+Write-Host "Execution from removable disks blocked successfully." -ForegroundColor Green
