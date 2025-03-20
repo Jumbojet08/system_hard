@@ -1,15 +1,3 @@
-# Ensure script runs with admin privileges
-if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Output "This script must be run as an Administrator."
-    exit 1
-}
- 
-# Log file location
-$logFile = "C:\Windows\Temp\CDROM_Disable.log"
- 
-# Registry path to disable CD-ROM access
-$cdromRegPath = "HKLM:\SYSTEM\CurrentControlSet\Services\cdrom"
- 
 # Disable CD-ROM by setting 'Start' value to 4 (Disabled)
 try {
     Set-ItemProperty -Path $cdromRegPath -Name "Start" -Value 4 -Force
