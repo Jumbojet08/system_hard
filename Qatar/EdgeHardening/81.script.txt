@@ -1,2 +1,15 @@
-# Enable Windows Messenger CEIP
-Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "DisableCEIP" -Value 1
+Write-Host "Enabling Windows Messenger CEIP..." -ForegroundColor Yellow
+
+# Define the registry path
+$regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
+
+# Check if the registry path exists; if not, create it
+if (-not (Test-Path $regPath)) {
+    Write-Host "Registry path not found. Creating it..." -ForegroundColor Yellow
+    New-Item -Path $regPath -Force | Out-Null
+}
+
+# Set the policy to enable Windows Messenger CEIP
+Set-ItemProperty -Path $regPath -Name "DisableCEIP" -Value 1
+
+Write-Host "Windows Messenger CEIP has been enabled successfully." -ForegroundColor Green
