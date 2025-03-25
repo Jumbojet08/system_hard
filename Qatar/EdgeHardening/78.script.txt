@@ -1,2 +1,15 @@
-# Enable Turn off Search Companion content file updates
-Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "DisableSearchBoxSuggestions" -Value 1
+Write-Host "Disabling Search Companion content file updates..." -ForegroundColor Yellow
+
+# Define the registry path
+$regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+
+# Check if the registry path exists; if not, create it
+if (-not (Test-Path $regPath)) {
+    Write-Host "Registry path not found. Creating it..." -ForegroundColor Yellow
+    New-Item -Path $regPath -Force | Out-Null
+}
+
+# Set the policy to disable Search Companion content updates
+Set-ItemProperty -Path $regPath -Name "DisableSearchBoxSuggestions" -Value 1
+
+Write-Host "Search Companion content file updates have been disabled successfully." -ForegroundColor Green
