@@ -1,3 +1,20 @@
-# Disable Windows Error Reporting
-Set-Service -Name "WerSvc" -StartupType Disabled
-Stop-Service -Name "WerSvc" -Force
+Write-Host "Disabling Windows Error Reporting Service (WerSvc)..." -ForegroundColor Yellow
+
+# Check if the service exists before attempting to modify it
+$service = Get-Service -Name "WerSvc" -ErrorAction SilentlyContinue
+
+if ($service) {
+    # Disable the service
+    Set-Service -Name "WerSvc" -StartupType Disabled
+    Write-Host "Windows Error Reporting Service has been disabled." -ForegroundColor Green
+
+    # Stop the service if it's running
+    if ($service.Status -eq 'Running') {
+        Stop-Service -Name "WerSvc" -Force
+        Write-Host "Windows Error Reporting Service has been stopped." -ForegroundColor Green
+    } else {
+        Write-Host "Service is already stopped." -ForegroundColor Cyan
+    }
+} else {
+    Write-Host "Windows Error Reporting Service not found. It might already be removed or disabled." -ForegroundColor Red
+}
