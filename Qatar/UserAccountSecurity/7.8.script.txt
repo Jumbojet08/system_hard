@@ -1,0 +1,21 @@
+# Disable Built-in Administrator Account
+Write-Host "Disabling the built-in Administrator account..." -ForegroundColor Yellow
+$adminAccount = Get-LocalUser | Where-Object { $_.Name -eq "Administrator" }
+
+if ($adminAccount -and $adminAccount.Enabled) {
+    Disable-LocalUser -Name "Administrator"
+    Write-Host "Administrator account has been disabled successfully." -ForegroundColor Green
+} else {
+    Write-Host "Administrator account is already disabled or does not exist." -ForegroundColor Cyan
+}
+
+# Disable Built-in Guest Account
+Write-Host "Disabling the built-in Guest account..." -ForegroundColor Yellow
+$guestAccount = Get-LocalUser | Where-Object { $_.Name -eq "Guest" }
+
+if ($guestAccount -and $guestAccount.Enabled) {
+    Disable-LocalUser -Name "Guest"
+    Write-Host "Guest account has been disabled successfully." -ForegroundColor Green
+} else {
+    Write-Host "Guest account is already disabled or does not exist." -ForegroundColor Cyan
+}

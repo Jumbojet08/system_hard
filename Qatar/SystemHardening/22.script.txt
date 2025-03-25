@@ -1,0 +1,7 @@
+# Disable unwanted Windows features like Messenger, Telnet, DVD Player, etc.
+# Disable Windows Messenger
+Disable-WindowsOptionalFeature -Online -FeatureName "WindowsMessenger" -NoRestart
+# Disable Telnet
+Disable-WindowsOptionalFeature -Online -FeatureName "TelnetClient" -NoRestart
+# Disable DVD Player
+Disable-WindowsOptionalFeature -Online -FeatureName "DVDPlayback" -NoRestart

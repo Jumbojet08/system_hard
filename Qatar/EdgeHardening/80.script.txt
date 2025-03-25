@@ -1,0 +1,2 @@
+# Enable Turn off the "Publish to Web" task for files and folders
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "DisablePublishWeb" -Value 1

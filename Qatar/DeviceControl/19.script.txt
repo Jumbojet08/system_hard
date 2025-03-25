@@ -1,0 +1,6 @@
+# Disable Windows audio (excluding operator workstation)
+$audioService = Get-Service -Name "Audiosrv"
+if ($audioService.Status -eq "Running") {
+    Stop-Service -Name "Audiosrv" -Force
+    Set-Service -Name "Audiosrv" -StartupType Disabled
+}

@@ -1,0 +1,4 @@
+# Enable "Digitally encrypt or sign secure channel data (always)"
+$secpolicyChannel = "HKLM:\System\CurrentControlSet\Services\Netlogon\Parameters"
+Set-ItemProperty -Path $secpolicyChannel -Name "SignSecureChannel" -Value 1
+

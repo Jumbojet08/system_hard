@@ -1,0 +1,2 @@
+# Disable app notifications on the lock screen
+Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows\CurrentVersion\Notifications" -Name "NoLockScreen" -Value 1

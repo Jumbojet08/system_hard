@@ -1,0 +1,4 @@
+# Disable Internet Explorer on Unnecessary Workstations (e.g., Operator Workstations)
+# This could be a service stop or app block based on system specifics
+Stop-Service -Name "iexplore" -Force
+Set-Service -Name "iexplore" -StartupType Disabled

@@ -1,0 +1,3 @@
+# Enable Support Device Authentication using Certificate (Automatic)
+Set-Service -Name "CertPropSvc" -StartupType Automatic
+Start-Service -Name "CertPropSvc"

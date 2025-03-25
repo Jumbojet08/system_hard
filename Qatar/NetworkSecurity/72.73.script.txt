@@ -1,0 +1,4 @@
+# Enable Point and Print Restrictions
+Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows NT\Printers" -Name "PointAndPrintRestrictions" -Value 1
+Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows NT\Printers" -Name "RestrictDriverInstallation" -Value 1
+

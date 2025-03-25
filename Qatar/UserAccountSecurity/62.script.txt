@@ -1,0 +1,2 @@
+# Disable Font Providers
+Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows NT\Printers" -Name "DisableFontProvider" -Value 1

@@ -1,0 +1,2 @@
+# Ensure passwords are not saved for Remote Desktop Connections
+Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows NT\Terminal Services" -Name "DisablePasswordSaving" -Value 1

@@ -1,0 +1,2 @@
+# Enable Turn off downloading of print drivers over HTTP
+Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows NT\Printers" -Name "NoHttpPrint" -Value 1

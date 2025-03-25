@@ -1,0 +1,2 @@
+# Disable Deleting Temp Folders upon Exit
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "DeleteTempFilesOnExit" -Value 0

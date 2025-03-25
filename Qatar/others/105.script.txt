@@ -1,0 +1,2 @@
+# Disable Windows Ink Workspace
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "DisableInkWorkspace" -Value 1

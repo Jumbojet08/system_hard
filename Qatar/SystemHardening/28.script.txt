@@ -1,0 +1,3 @@
+# Disable "Allow system to be shut down without having to log on"
+$shutdownReg = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+Set-ItemProperty -Path $shutdownReg -Name "ShutdownWithoutLogon" -Value 0

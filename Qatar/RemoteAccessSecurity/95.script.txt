@@ -1,0 +1,2 @@
+# Enable Network Level Authentication (NLA)
+Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "UserAuthentication" -Value 1

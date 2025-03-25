@@ -1,0 +1,2 @@
+# Disable Plug and Play device redirection
+Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows NT\Terminal Services" -Name "fDisablePnPRedirection" -Value 1

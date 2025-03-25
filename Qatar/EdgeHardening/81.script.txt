@@ -1,0 +1,2 @@
+# Enable Windows Messenger CEIP
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "DisableCEIP" -Value 1

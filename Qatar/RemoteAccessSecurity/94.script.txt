@@ -1,0 +1,2 @@
+# Enable Remote Desktop Services Single Session
+Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows NT\Terminal Services" -Name "MaxInstanceCount" -Value 1

@@ -1,0 +1,2 @@
+# Disable Autoplay for all drives
+Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows\Explorer" -Name "NoDriveTypeAutoRun" -Value 0xFF

@@ -1,0 +1,2 @@
+# Enable Turn off Internet Connection Wizard for Microsoft.com URL
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -Name "EnableICW" -Value 0

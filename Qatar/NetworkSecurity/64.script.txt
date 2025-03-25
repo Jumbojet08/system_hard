@@ -1,0 +1,3 @@
+# Disable Mapper I/O (LLTDIO) Driver
+Set-Service -Name "lltdsvc" -StartupType Disabled
+Stop-Service -Name "lltdsvc" -Force

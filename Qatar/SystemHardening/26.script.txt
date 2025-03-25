@@ -1,0 +1,3 @@
+# Enable "Require strong session key"
+$secpolicySession = "HKLM:\System\CurrentControlSet\Services\Netlogon\Parameters"
+Set-ItemProperty -Path $secpolicySession -Name "RequireStrongKey" -Value 1

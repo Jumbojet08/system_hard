@@ -1,0 +1,3 @@
+# Disable Windows Error Reporting
+Set-Service -Name "WerSvc" -StartupType Disabled
+Stop-Service -Name "WerSvc" -Force

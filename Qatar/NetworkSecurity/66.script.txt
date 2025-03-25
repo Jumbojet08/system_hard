@@ -1,0 +1,3 @@
+# Disable Unused Network Interface Cards (LAN, Wireless)
+$networkAdapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and $_.Name -notmatch "Virtual|Ethernet" }
+$networkAdapters | Disable-NetAdapter -Confirm:$false

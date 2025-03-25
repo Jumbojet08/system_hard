@@ -1,0 +1,3 @@
+# Deny behavior of the elevation prompt for standard users
+$elevationReg = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+Set-ItemProperty -Path $elevationReg -Name "PromptOnSecureDesktop" -Value 0

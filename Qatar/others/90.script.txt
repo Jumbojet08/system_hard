@@ -1,0 +1,2 @@
+# Enable Microsoft accounts to be optional
+Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows\System" -Name "AllowMicrosoftAccount" -Value 1

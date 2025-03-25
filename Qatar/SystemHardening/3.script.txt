@@ -1,0 +1,15 @@
+# Define report file location
+$reportPath = "C:\Logs\InstalledPatches.csv"
+
+# Ensure the logs directory exists
+if (!(Test-Path "C:\Logs")) {
+    New-Item -ItemType Directory -Path "C:\Logs" | Out-Null
+}
+
+# Get installed patches
+$patches = Get-HotFix | Select-Object HotFixID, Description, InstalledOn, InstalledBy
+
+# Export to CSV
+$patches | Export-Csv -Path $reportPath -NoTypeInformation
+
+Write-Host "Installed patches report saved to: $reportPath"

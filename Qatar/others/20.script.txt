@@ -1,0 +1,6 @@
+# Disable Link Layer Topology Discovery (LLTD) service
+$lltdService = Get-Service -Name "lltdsvc"
+if ($lltdService.Status -eq "Running") {
+    Stop-Service -Name "lltdsvc" -Force
+    Set-Service -Name "lltdsvc" -StartupType Disabled
+}

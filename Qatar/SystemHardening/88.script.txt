@@ -1,0 +1,3 @@
+# Enable Windows NTP Client
+Set-Service -Name "w32time" -StartupType Automatic
+Start-Service -Name "w32time"

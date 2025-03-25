@@ -1,0 +1,3 @@
+
+# Verify drive redirection is not configured
+Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows NT\Terminal Services" -Name "fDisableDrivesRedirection" -Value 1

@@ -1,0 +1,2 @@
+# Disable Background Refresh of Group Policy
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\System" -Name "DisableBackgroundRefresh" -Value 1

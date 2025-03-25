@@ -1,0 +1,2 @@
+# Disable picture password sign-in
+Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows\System" -Name "AllowPicturePassword" -Value 0

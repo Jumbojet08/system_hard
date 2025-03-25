@@ -1,0 +1,2 @@
+# Enable 'Limit print driver installation to Administrators'
+Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows NT\Printers" -Name "LimitDriverInstallation" -Value 1

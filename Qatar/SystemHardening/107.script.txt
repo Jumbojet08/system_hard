@@ -1,0 +1,2 @@
+# Disable PowerShell Transcription
+Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell" -Name "EnableTranscription" -Value 0

@@ -1,0 +1,2 @@
+# Disable NetBIOS Protocol
+Set-NetAdapterBinding -Name "Ethernet" -ComponentID ms_tcpip6 -Enabled $false

@@ -1,0 +1,17 @@
+# Set the deterrent login banner
+
+   # Define the banner title and text
+     $bannerTitle = "**** Unauthorized Access is Prohibited ****"
+     $bannerText = "This property belongs to QatarEnergy and any unauthorized attempts to access this device will be logged and investigated. Violators will be prosecuted in conformance with local state laws."
+
+   # Registry paths for setting the banner
+     $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+
+   # Set the legal notice caption (banner title)
+   Set-ItemProperty -Path $regPath -Name "LegalNoticeCaption" -Value $bannerTitle -ErrorAction Stop
+
+   # Set the legal notice text (banner text)
+   Set-ItemProperty -Path $regPath -Name "LegalNoticeText" -Value $bannerText -ErrorAction Stop
+
+   # Confirm success
+   Write-Host "Login banner has been successfully set."

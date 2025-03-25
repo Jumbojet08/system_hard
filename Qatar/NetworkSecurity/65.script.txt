@@ -1,0 +1,3 @@
+# Disable Responder (RSPNDR) Driver
+Set-Service -Name "rspndr" -StartupType Disabled
+Stop-Service -Name "rspndr" -Force

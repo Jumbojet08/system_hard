@@ -1,0 +1,2 @@
+# Disable PowerShell Script Block Logging
+Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell" -Name "EnableScriptBlockLogging" -Value 0

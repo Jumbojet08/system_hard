@@ -1,0 +1,2 @@
+# Enable Turn off printing over HTTP
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows NT\Printers" -Name "NoHttpPrinting" -Value 1

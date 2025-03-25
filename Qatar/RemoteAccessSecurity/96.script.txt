@@ -1,0 +1,2 @@
+# Disable COM Port Redirection
+Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows NT\Terminal Services" -Name "fDisableCdm" -Value 1

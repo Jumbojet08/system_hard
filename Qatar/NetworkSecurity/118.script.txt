@@ -1,0 +1,2 @@
+# Enforce Message Signing in SMB
+Set-SmbServerConfiguration -RequireSecuritySignature $true -Force

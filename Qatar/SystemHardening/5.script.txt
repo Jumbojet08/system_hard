@@ -1,0 +1,4 @@
+# 2. Set Time Zone to GMT +03
+    Write-Host "Setting time zone to GMT +03..."
+    tzutil /s "Russian Standard Time"
+    Write-Host "Time zone set to GMT +03."

@@ -1,0 +1,12 @@
+# 3. Block USB Ports and CD drives
+   Write-Host "Blocking USB Ports and CD Drives..."
+
+    # Disable USB Storage
+    New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\USBSTOR" -Name "Start" -Value 4 -PropertyType DWORD -Force
+
+
+    # Disable CD/DVD Drives
+    New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\cdrom" -Name "Start" -Value 4 -PropertyType DWORD -Force
+
+    Write-Host "USB ports and CD drives have been blocked."
+

@@ -1,0 +1,2 @@
+# Disable password reveal button
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoPasswordReveal" -Value 1

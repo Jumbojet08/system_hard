@@ -1,0 +1,2 @@
+# Disable Insecure Guest Logons
+Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Services\LanmanServer\Parameters" -Name "EnableInsecureGuestLogons" -Value 0

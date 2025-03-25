@@ -1,0 +1,2 @@
+# Always Prompt for Password on Remote Desktop Connection
+Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows NT\Terminal Services" -Name "PromptForPassword" -Value 1

@@ -1,0 +1,2 @@
+# Enable Not Using Temporary Folders per Session
+Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows\System" -Name "UseTempFile" -Value 0

@@ -1,0 +1,2 @@
+# Require Secure RPC Communication
+Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows NT\RPC" -Name "SecurityLevel" -Value 2

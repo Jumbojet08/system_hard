@@ -1,0 +1,2 @@
+# Enable Devices: Prevent users from installing printer drivers
+Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows NT\Printers" -Name "NoInstallDriver" -Value 1

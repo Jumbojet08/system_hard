@@ -1,0 +1,2 @@
+# Disable Suggested Apps in Windows Ink Workspace
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "DisableSuggestedApps" -Value 1

@@ -1,0 +1,42 @@
+# Set password policies for Administrator and Standard User accounts
+
+    # Administrator account password policy criteria
+    $adminMinPasswordLength = 20
+    $adminPasswordHistoryCount = 12
+    $adminMaxPasswordAge = 180
+    $adminMinPasswordAge = 5
+
+    # Standard User account password policy criteria
+    $stdMinPasswordLength = 12
+    $stdPasswordHistoryCount = 5
+    $stdMaxPasswordAge = 180
+    $stdMinPasswordAge = 5
+
+    # Enable password complexity
+    Write-Host "Enabling password complexity..."
+    secedit /export /cfg "C:\Temp\secpol.cfg"
+    (Get-Content "C:\Temp\secpol.cfg").replace("PasswordComplexity = 0", "PasswordComplexity = 1") | Set-Content "C:\Temp\secpol.cfg"
+    secedit /configure /db secedit.sdb /cfg "C:\Temp\secpol.cfg" /areas SECURITYPOLICY
+    Remove-Item "C:\Temp\secpol.cfg"
+
+    # Administrator account password policies
+    Write-Host "Setting Administrator account password policies..."
+    Write-Host "Setting minimum password length to $adminMinPasswordLength..."
+    net accounts /minpwlen:$adminMinPasswordLength
+    Write-Host "Enforcing password history of $adminPasswordHistoryCount passwords..."
+    net accounts /uniquepw:$adminPasswordHistoryCount
+    Write-Host "Setting maximum password age to $adminMaxPasswordAge days..."
+    net accounts /maxpwage:$adminMaxPasswordAge
+    Write-Host "Setting minimum password age to $adminMinPasswordAge days..."
+    net accounts /minpwage:$adminMinPasswordAge
+
+    # Standard User account password policies
+    Write-Host "Setting Standard User account password policies..."
+    Write-Host "Setting minimum password length to $stdMinPasswordLength..."
+    net accounts /minpwlen:$stdMinPasswordLength
+    Write-Host "Enforcing password history of $stdPasswordHistoryCount passwords..."
+    net accounts /uniquepw:$stdPasswordHistoryCount
+    Write-Host "Setting maximum password age to $stdMaxPasswordAge days..."
+    net accounts /maxpwage:$stdMaxPasswordAge
+    Write-Host "Setting minimum password age to $stdMinPasswordAge days..."
+    net accounts /minpwage:$stdMinPasswordAge

@@ -1,0 +1,2 @@
+# Prevent Codec Download
+Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoCodecDownload" -Value 1

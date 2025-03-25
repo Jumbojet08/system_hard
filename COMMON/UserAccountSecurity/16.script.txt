@@ -1,0 +1,17 @@
+# Define service accounts (replace with actual service accounts)
+$ServiceAccounts = @("svcBackup", "svcSQL", "svcWebApp")  
+
+# Define policy settings
+$PolicyNames = @("SeDenyInteractiveLogonRight", "SeDenyNetworkLogonRight", "SeDenyRemoteInteractiveLogonRight")
+
+# Apply deny policies to each service account
+foreach ($Account in $ServiceAccounts) {
+    foreach ($Policy in $PolicyNames) {
+        secedit /export /cfg C:\secpol.cfg
+        (Get-Content C:\secpol.cfg) -replace "$Policy = ", "$Policy = $Account," | Set-Content C:\secpol.cfg
+        secedit /configure /db c:\windows\security\local.sdb /cfg C:\secpol.cfg /areas SECURITYPOLICY
+    }
+}
+
+# Force group policy update
+gpupdate /force

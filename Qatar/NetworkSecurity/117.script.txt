@@ -1,0 +1,3 @@
+# Disable Anonymous FTP
+Set-Service -Name "ftpd" -StartupType Disabled
+Stop-Service -Name "ftpd" -Force

@@ -1,0 +1,3 @@
+# Enable "Do not display last user name"
+$localSecurity = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+Set-ItemProperty -Path $localSecurity -Name "DontDisplayLastUserName" -Value 1

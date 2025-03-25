@@ -1,0 +1,3 @@
+# Disable Refuse machine account password changes
+$secpolicy = "HKLM:\System\CurrentControlSet\Services\Netlogon\Parameters"
+Set-ItemProperty -Path $secpolicy -Name "DisablePasswordChange" -Value 1

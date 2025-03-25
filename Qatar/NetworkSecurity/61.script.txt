@@ -1,0 +1,2 @@
+# Disable SMBv1 Server
+Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force

@@ -1,0 +1,2 @@
+# Disable Enumerate Administrator Accounts on Elevation
+Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnumerateAdministrators" -Value 0

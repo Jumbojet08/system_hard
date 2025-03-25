@@ -1,0 +1,2 @@
+# Set AutoRun behavior: Do not execute any autorun commands
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoAutorun" -Value 1

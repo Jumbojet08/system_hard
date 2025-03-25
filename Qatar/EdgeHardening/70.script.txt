@@ -1,0 +1,2 @@
+# Enable Turn off Web publishing and online ordering wizards
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoWebCheck" -Value 1

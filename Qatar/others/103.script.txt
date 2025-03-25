@@ -1,0 +1,2 @@
+# Disable Microsoft MAPS
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "DisableMAPS" -Value 1

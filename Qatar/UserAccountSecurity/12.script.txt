@@ -1,0 +1,11 @@
+# Account lockout policies
+    Write-Host "Setting account lockout policies..."
+    $lockoutDuration = 30
+    $lockoutThreshold = 5
+    $lockoutReset = 30
+    Write-Host "Setting Account Lockout Duration to $lockoutDuration minutes..."
+    net accounts /lockoutduration:$lockoutDuration
+    Write-Host "Setting Account Lockout Threshold to $lockoutThreshold invalid login attempts..."
+    net accounts /lockoutthreshold:$lockoutThreshold
+    Write-Host "Setting Reset Account Lockout Counter to $lockoutReset minutes..."
+    net accounts /lockoutwindow:$lockoutReset

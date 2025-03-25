@@ -1,0 +1,6 @@
+# Change RDP port if allowed
+$rdpPortReg = "HKLM:\System\CurrentControlSet\Control\Terminal Server"
+$rdpPort = Get-ItemProperty -Path $rdpPortReg -Name "TCPEndpoint"
+if ($rdpPort.TCPEndpoint -eq 3389) {
+    Set-ItemProperty -Path $rdpPortReg -Name "TCPEndpoint" -Value 3390 # Use a different port (change 3390 as needed)
+}

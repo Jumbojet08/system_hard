@@ -1,0 +1,11 @@
+# Enable SmartScreen via registry (GPO Managed)
+$smartScreenPath = "HKLM:\Software\Policies\Microsoft\MicrosoftEdge\PhishingFilter"
+
+# Ensure the registry path exists
+if (!(Test-Path $smartScreenPath)) { New-Item -Path $smartScreenPath -Force | Out-Null }
+
+# Enable SmartScreen
+Set-ItemProperty -Path $smartScreenPath -Name "EnabledV9" -Value 1 -Type DWord
+
+# Force update Group Policy
+gpupdate /force

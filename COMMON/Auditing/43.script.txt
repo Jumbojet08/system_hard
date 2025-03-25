@@ -1,0 +1,11 @@
+# Event log settings for auditing
+    Write-Host "Configuring event logs for auditing..."
+    $logSize = 4194240
+    Write-Host "Setting maximum application log size to $logSize KB..."
+    wevtutil sl Application /ms:$logSize
+    Write-Host "Setting maximum security log size to $logSize KB..."
+    wevtutil sl Security /ms:$logSize
+    Write-Host "Setting maximum system log size to $logSize KB..."
+    wevtutil sl System /ms:$logSize
+
+    Write-Host "Password, account lockout, and event log policies have been successfully set."

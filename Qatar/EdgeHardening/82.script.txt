@@ -1,0 +1,2 @@
+# Disable Windows Customer Experience Improvement Program (CEIP)
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "DisableCEIP" -Value 1

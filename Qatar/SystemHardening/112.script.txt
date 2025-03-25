@@ -1,0 +1,2 @@
+# Configure Recycle Bin settings
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "MaxRecycleBinSize" -Value 7 # Or your desired size

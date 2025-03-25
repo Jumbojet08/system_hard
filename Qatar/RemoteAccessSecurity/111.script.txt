@@ -1,0 +1,2 @@
+# Set Idle Timeout for Remote Desktop Services Sessions to 15 minutes
+Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows NT\Terminal Services" -Name "IdleTimeoutSecs" -Value 900

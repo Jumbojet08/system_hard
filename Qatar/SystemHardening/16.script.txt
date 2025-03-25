@@ -1,0 +1,60 @@
+# List of unwanted applications to remove
+$UnwantedApps = @(
+    "sol.exe",
+    "winmine.exe",
+    "winword.exe",
+    "utilman.exe",
+    "msimn.exe",
+    "command.com",
+    "cmd.exe",
+    "controlbuilder.exe",
+    "freecell.exe",
+    "Pinball.exe",
+    "mstsc.exe",
+    "vnc viewer.exe",
+    "vmplayer.exe",
+    "Powershell.exe",
+    "Certutil.exe"
+)
+
+# Directories to scan for the unwanted applications
+$DirectoriesToScan = @(
+    "$env:SystemRoot\System32",
+    "$env:SystemRoot\SysWOW64",
+    "$env:ProgramFiles",
+    "$env:ProgramFiles(x86)",
+    "$env:UserProfile"
+)
+
+# Function to remove unwanted applications
+function Remove-UnwantedApplications {
+    param (
+        [string[]]$Apps,
+        [string[]]$Directories
+    )
+
+    foreach ($Directory in $Directories) {
+        if (Test-Path $Directory) {
+            foreach ($App in $Apps) {
+                $AppPath = Get-ChildItem -Path $Directory -Recurse -Filter $App -ErrorAction SilentlyContinue
+                
+                foreach ($File in $AppPath) {
+                    try {
+                        Write-Host "Removing $($File.FullName)..." -ForegroundColor Yellow
+                        Remove-Item -Path $File.FullName -Force -ErrorAction Stop
+                        Write-Host "Removed: $($File.FullName)" -ForegroundColor Green
+                    } catch {
+                        Write-Host "Failed to remove: $($File.FullName) - $_" -ForegroundColor Red
+                    }
+                }
+            }
+        } else {
+            Write-Host "Directory does not exist: $Directory" -ForegroundColor Red
+        }
+    }
+}
+
+# Execute the removal function
+Remove-UnwantedApplications -Apps $UnwantedApps -Directories $DirectoriesToScan
+
+#End of the process to remove unwanted Applications

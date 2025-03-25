@@ -1,0 +1,2 @@
+# Disable Convenience PIN sign-in
+Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\System" -Name "AllowDomainPINLogon" -Value 0

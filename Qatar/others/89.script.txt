@@ -1,0 +1,2 @@
+# Disable Allow a Windows app to share application data between users
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoAppSharing" -Value 1
