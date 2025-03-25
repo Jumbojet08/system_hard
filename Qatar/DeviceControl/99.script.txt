@@ -1,2 +1,12 @@
-# Disable Plug and Play device redirection
-Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows NT\Terminal Services" -Name "fDisablePnPRedirection" -Value 1
+# Define the registry path
+$regPath = "HKCU:\Software\Policies\Microsoft\Windows NT\Terminal Services"
+
+# Check if the path exists, if not, create it
+if (-not (Test-Path $regPath)) {
+    New-Item -Path $regPath -Force | Out-Null
+}
+
+# Set the Plug and Play device redirection policy
+Set-ItemProperty -Path $regPath -Name "fDisablePnPRedirection" -Value 1 -Type DWord
+
+Write-Host "Plug and Play device redirection has been disabled successfully." -ForegroundColor Green
