@@ -1,2 +1,15 @@
-# Enable Turn off the "Order Prints" task
-Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "DisableOrderPrints" -Value 1
+Write-Host "Disabling the 'Order Prints' task..." -ForegroundColor Yellow
+
+# Define the registry path
+$regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+
+# Check if the registry path exists; if not, create it
+if (-not (Test-Path $regPath)) {
+    Write-Host "Registry path not found. Creating it..." -ForegroundColor Yellow
+    New-Item -Path $regPath -Force | Out-Null
+}
+
+# Set the policy to disable the "Order Prints" task
+Set-ItemProperty -Path $regPath -Name "DisableOrderPrints" -Value 1
+
+Write-Host "'Order Prints' task has been disabled successfully." -ForegroundColor Green
