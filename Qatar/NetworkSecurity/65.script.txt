@@ -1,3 +1,17 @@
-# Disable Responder (RSPNDR) Driver
-Set-Service -Name "rspndr" -StartupType Disabled
-Stop-Service -Name "rspndr" -Force
+Write-Host "Disabling Link-Layer Topology Discovery Responder (RSPNDR)..." -ForegroundColor Yellow
+
+# Disable the Responder service if it exists
+Set-Service -Name "rspndr" -StartupType Disabled -ErrorAction SilentlyContinue
+Stop-Service -Name "rspndr" -Force -ErrorAction SilentlyContinue
+Write-Host "Responder service stopped (if applicable)." -ForegroundColor Green
+
+# Disable the Responder Driver via Registry
+$regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\rspndr"
+if (Test-Path $regPath) {
+    Set-ItemProperty -Path $regPath -Name "Start" -Value 4
+    Write-Host "Responder (RSPNDR) driver disabled via registry." -ForegroundColor Green
+} else {
+    Write-Host "Registry path for RSPNDR not found. It may already be disabled." -ForegroundColor Red
+}
+
+Write-Host "Responder (RSPNDR) has been disabled successfully. A reboot is required to apply changes." -ForegroundColor Cyan
