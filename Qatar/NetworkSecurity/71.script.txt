@@ -1,2 +1,13 @@
-# Enable Turn off printing over HTTP
-Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows NT\Printers" -Name "NoHttpPrinting" -Value 1
+$regPath = "HKCU:\Software\Microsoft\Windows NT\Printers"
+$regName = "NoHttpPrinting"
+$regValue = 1
+
+# Check if the registry path exists; if not, create it
+if (-not (Test-Path $regPath)) {
+    Write-Host "Registry path not found. Creating: $regPath" -ForegroundColor Yellow
+    New-Item -Path $regPath -Force | Out-Null
+}
+
+# Set the registry value
+Set-ItemProperty -Path $regPath -Name $regName -Value $regValue
+Write-Host "Turn off printing over HTTP has been enabled." -ForegroundColor Green
