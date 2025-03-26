@@ -1,0 +1,52 @@
+# Ensure script runs with admin privileges
+if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+    Write-Output "This script must be run as an Administrator."
+    exit 1
+}
+
+# Mapping services to system types
+$servicesToDisable = @{
+    "DCS" = @("DPS", "DiagTrack", "dmwappushservice", "MapsBroker", "iphlpsvc", "PolicyAgent", "CscService", "PcaSvc", "RemoteRegistry", "ShellHWDetection", "WerSvc", "WpnService", "BTAGService", "BluetoothUserService", "bthserv", "XblAuthManager", "XblGameSave", "XblNetApiSvc", "XboxGipSvc", "Fax", "WIA")
+    "SIS" = @("DPS", "DiagTrack", "dmwappushservice", "MapsBroker", "iphlpsvc", "PolicyAgent", "CscService", "PcaSvc", "RemoteRegistry", "ShellHWDetection", "WerSvc", "WpnService", "BTAGService", "BluetoothUserService", "bthserv", "XblAuthManager", "XblGameSave", "XblNetApiSvc", "XboxGipSvc", "Fax", "WIA")
+    "PRM" = @("IPHelper", "PolicyAgent", "ShellHWDetection", "WerSvc", "NetworkDDE", "NetworkDDEDSDM", "UPnPHost", "WinHttpAutoProxySvc", "Themes", "SecondaryLogon")
+    "EXAOPC" = @("DPS", "DiagTrack", "dmwappushservice", "MapsBroker", "iphlpsvc", "PolicyAgent", "CscService", "PcaSvc", "RemoteRegistry", "ShellHWDetection", "WerSvc", "BTAGService", "BluetoothUserService", "bthserv", "XboxGipSvc", "Fax", "WIA")
+    "CYBER" = @("DPS", "DiagTrack", "dmwappushservice", "MapsBroker", "iphlpsvc", "PolicyAgent", "CscService", "PcaSvc", "RemoteRegistry", "ShellHWDetection", "WerSvc", "BTAGService", "BluetoothUserService", "bthserv", "XboxGipSvc", "Fax", "WIA")
+    "HOST" = @("DPS", "DiagTrack", "dmwappushservice", "MapsBroker", "iphlpsvc", "PolicyAgent", "CscService", "PcaSvc", "RemoteRegistry", "ShellHWDetection", "WerSvc", "BTAGService", "BluetoothUserService", "bthserv", "XboxGipSvc", "Fax", "WIA")
+    "THIN C" = @("WebClient", "WerSvc", "Themes", "XboxGipSvc", "Fax", "WIA", "Messenger")
+}
+
+# Prompt user for system type
+$systemType = Read-Host "Enter the system type (DCS, SIS, PRM, EXAOPC, CYBER, HOST, THIN C)"
+
+# Validate input
+if (-not $servicesToDisable.ContainsKey($systemType)) {
+    Write-Output "Invalid system type entered. Please run the script again with a valid option."
+    exit 1
+}
+
+# Log file location
+$logFile = "C:\Windows\Temp\Disable_Services_$systemType.log"
+if (!(Test-Path "C:\Windows\Temp")) { New-Item -Path "C:\Windows\Temp" -ItemType Directory -Force }
+
+# Function to disable a service
+function Disable-Service {
+    param ([string]$serviceName)
+    $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if ($service) {
+        if ($service.Status -ne 'Stopped') {
+            Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
+        }
+        Set-Service -Name $serviceName -StartupType Disabled
+        Write-Output "$(Get-Date) - Disabled service: $serviceName" | Out-File -Append -FilePath $logFile
+    } else {
+        Write-Output "$(Get-Date) - Service not found: $serviceName" | Out-File -Append -FilePath $logFile
+    }
+}
+
+# Disable selected services
+foreach ($service in $servicesToDisable[$systemType]) {
+    Disable-Service -serviceName $service
+}
+
+Write-Output "Services for $systemType have been disabled. Log saved at $logFile."
+exit 0
