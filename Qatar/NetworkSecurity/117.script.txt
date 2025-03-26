@@ -1,3 +1,20 @@
-# Disable Anonymous FTP
-Set-Service -Name "ftpd" -StartupType Disabled
-Stop-Service -Name "ftpd" -Force
+Write-Host "Disabling FTP Service..." -ForegroundColor Yellow
+
+# Check if the FTP service exists
+$ftpService = Get-Service -Name "ftpsvc" -ErrorAction SilentlyContinue
+
+if ($ftpService) {
+    # Disable the service
+    Set-Service -Name "ftpsvc" -StartupType Disabled
+    Write-Host "FTP Service has been disabled." -ForegroundColor Green
+
+    # Stop the service if running
+    if ($ftpService.Status -eq 'Running') {
+        Stop-Service -Name "ftpsvc" -Force
+        Write-Host "FTP Service has been stopped." -ForegroundColor Green
+    } else {
+        Write-Host "FTP Service is already stopped." -ForegroundColor Cyan
+    }
+} else {
+    Write-Host "FTP Service not found. It may not be installed." -ForegroundColor Red
+}

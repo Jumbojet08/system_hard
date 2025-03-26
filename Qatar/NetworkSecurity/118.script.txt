@@ -1,2 +1,9 @@
-# Enforce Message Signing in SMB
+Write-Host "Enforcing SMB Message Signing..." -ForegroundColor Yellow
+
+# Ensure SMB Server requires message signing
 Set-SmbServerConfiguration -RequireSecuritySignature $true -Force
+Write-Host "SMB Server Message Signing enforced." -ForegroundColor Green
+
+# Ensure SMB Client requires message signing
+Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" -Name "RequireSecuritySignature" -Value 1
+Write-Host "SMB Client Message Signing enforced." -ForegroundColor Green

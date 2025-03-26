@@ -1,2 +1,15 @@
-# Enable Turn off Web publishing and online ordering wizards
-Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoWebCheck" -Value 1
+Write-Host "Disabling Web Publishing and Online Ordering Wizards..." -ForegroundColor Yellow
+
+# Define the registry path
+$regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
+
+# Check if the registry path exists; if not, create it
+if (-not (Test-Path $regPath)) {
+    Write-Host "Registry path not found. Creating it..." -ForegroundColor Yellow
+    New-Item -Path $regPath -Force | Out-Null
+}
+
+# Disable Web Publishing and Online Ordering Wizards
+Set-ItemProperty -Path $regPath -Name "NoWebCheck" -Value 1
+
+Write-Host "Web Publishing and Online Ordering Wizards have been disabled successfully." -ForegroundColor Green

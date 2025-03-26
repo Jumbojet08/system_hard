@@ -1,4 +1,15 @@
-# Disable Internet Explorer on Unnecessary Workstations (e.g., Operator Workstations)
-# This could be a service stop or app block based on system specifics
-Stop-Service -Name "iexplore" -Force
-Set-Service -Name "iexplore" -StartupType Disabled
+Write-Host "Disabling Internet Explorer..." -ForegroundColor Yellow
+
+# Registry Path to block execution of iexplore.exe
+$regPath = "HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\iexplore.exe"
+
+# Check if the registry path exists
+if (-not (Test-Path $regPath)) {
+    Write-Host "Registry path not found. Creating path to block Internet Explorer..." -ForegroundColor Yellow
+    New-Item -Path $regPath -Force | Out-Null
+}
+
+# Block execution of Internet Explorer
+Set-ItemProperty -Path $regPath -Name "Debugger" -Value "ntsd -d"
+
+Write-Host "Internet Explorer execution has been blocked via registry." -ForegroundColor Green

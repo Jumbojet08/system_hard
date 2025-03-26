@@ -1,3 +1,17 @@
-# Disable Unused Network Interface Cards (LAN, Wireless)
-$networkAdapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and $_.Name -notmatch "Virtual|Ethernet" }
-$networkAdapters | Disable-NetAdapter -Confirm:$false
+Write-Host "Disabling unused network adapters..." -ForegroundColor Yellow
+
+# Get all enabled network adapters that are NOT Ethernet, Wi-Fi, Virtual, or Loopback
+$networkAdapters = Get-NetAdapter | Where-Object {
+    $_.Status -eq "Up" -and
+    $_.Name -notmatch "Ethernet|Wi-Fi|Loopback|Virtual"
+}
+
+if ($networkAdapters.Count -gt 0) {
+    $networkAdapters | ForEach-Object {
+        Write-Host "Disabling adapter: $($_.Name)" -ForegroundColor Red
+        Disable-NetAdapter -Name $_.Name -Confirm:$false
+    }
+    Write-Host "Unused network adapters have been disabled successfully." -ForegroundColor Green
+} else {
+    Write-Host "No unused network adapters found." -ForegroundColor Cyan
+}

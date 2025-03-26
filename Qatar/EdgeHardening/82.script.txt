@@ -1,2 +1,15 @@
-# Disable Windows Customer Experience Improvement Program (CEIP)
-Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "DisableCEIP" -Value 1
+Write-Host "Disabling Windows Customer Experience Improvement Program (CEIP)..." -ForegroundColor Yellow
+
+# Define the registry path
+$regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
+
+# Check if the registry path exists; if not, create it
+if (-not (Test-Path $regPath)) {
+    Write-Host "Registry path not found. Creating it..." -ForegroundColor Yellow
+    New-Item -Path $regPath -Force | Out-Null
+}
+
+# Disable CEIP by setting "DisableCEIP" to 1
+Set-ItemProperty -Path $regPath -Name "DisableCEIP" -Value 1
+
+Write-Host "Windows CEIP has been successfully disabled." -ForegroundColor Green

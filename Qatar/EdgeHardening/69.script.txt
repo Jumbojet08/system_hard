@@ -1,2 +1,15 @@
-# Enable Turn off Internet Connection Wizard for Microsoft.com URL
-Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -Name "EnableICW" -Value 0
+Write-Host "Disabling Internet Connection Wizard..." -ForegroundColor Yellow
+
+# Define the registry path
+$regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
+
+# Check if the registry path exists; if not, create it
+if (-not (Test-Path $regPath)) {
+    Write-Host "Registry path not found. Creating it..." -ForegroundColor Yellow
+    New-Item -Path $regPath -Force | Out-Null
+}
+
+# Disable Internet Connection Wizard
+Set-ItemProperty -Path $regPath -Name "EnableICW" -Value 0
+
+Write-Host "Internet Connection Wizard has been disabled successfully." -ForegroundColor Green

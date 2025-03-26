@@ -1,2 +1,11 @@
+Write-Host "Disabling SMBv1 Server and Client..." -ForegroundColor Yellow
+
 # Disable SMBv1 Server
 Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force
+Write-Host "SMBv1 Server disabled." -ForegroundColor Green
+
+# Disable SMBv1 Client (removes feature)
+Disable-WindowsOptionalFeature -Online -FeatureName "SMB1Protocol" -NoRestart
+Write-Host "SMBv1 Client disabled." -ForegroundColor Green
+
+Write-Host "SMBv1 has been disabled completely. Restart required for full effect!" -ForegroundColor Cyan

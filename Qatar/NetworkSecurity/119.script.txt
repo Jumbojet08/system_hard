@@ -1,2 +1,12 @@
-# Disable NetBIOS Protocol
-Set-NetAdapterBinding -Name "Ethernet" -ComponentID ms_tcpip6 -Enabled $false
+Write-Host "Disabling NetBIOS on all network adapters..." -ForegroundColor Yellow
+
+# Get all network adapters
+$adapters = Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object { $_.IPEnabled -eq $true }
+
+foreach ($adapter in $adapters) {
+    # 2 = Disable NetBIOS
+    $adapter.SetTcpipNetbios(2) | Out-Null
+    Write-Host "NetBIOS disabled for adapter: $($adapter.Description)" -ForegroundColor Green
+}
+
+Write-Host "NetBIOS has been disabled on all active adapters." -ForegroundColor Cyan

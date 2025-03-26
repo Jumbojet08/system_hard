@@ -1,4 +1,13 @@
-# Enable Point and Print Restrictions
-Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows NT\Printers" -Name "PointAndPrintRestrictions" -Value 1
-Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows NT\Printers" -Name "RestrictDriverInstallation" -Value 1
+$regPath = "HKCU:\Software\Policies\Microsoft\Windows NT\Printers"
 
+# Check if the registry path exists; if not, create it
+if (-not (Test-Path $regPath)) {
+    Write-Host "Registry path not found. Creating: $regPath" -ForegroundColor Yellow
+    New-Item -Path $regPath -Force | Out-Null
+}
+
+# Set the registry values
+Set-ItemProperty -Path $regPath -Name "PointAndPrintRestrictions" -Value 1
+Set-ItemProperty -Path $regPath -Name "RestrictDriverInstallation" -Value 1
+
+Write-Host "Point and Print Restrictions have been enabled." -ForegroundColor Green
