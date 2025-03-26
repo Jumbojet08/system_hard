@@ -1,0 +1,14 @@
+# Define the registry path and value
+$regPath = "HKLM:\System\CurrentControlSet\Control\Lsa"
+$regName = "LSAAnonymousNameLookup"
+$regValue = 0  # 0 = Disabled, 1 = Enabled
+
+# Check if the registry path exists; if not, create it
+if (!(Test-Path $regPath)) {
+    Write-Host "Registry path not found. Creating: $regPath" -ForegroundColor Yellow
+    New-Item -Path $regPath -Force | Out-Null
+}
+
+# Set the registry value
+Set-ItemProperty -Path $regPath -Name $regName -Value $regValue
+Write-Host "Anonymous SID/Name translation has been disabled successfully." -ForegroundColor Green

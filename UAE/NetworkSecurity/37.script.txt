@@ -1,0 +1,14 @@
+# Define the registry path and value
+$regPath = "HKLM:\System\CurrentControlSet\Services\LDAP"
+$regName = "LDAPClientIntegrity"
+$regValue = 1  # 1 = Negotiate signing, 2 = Require signing
+
+# Check if the registry path exists; if not, create it
+if (!(Test-Path $regPath)) {
+    Write-Host "Registry path not found. Creating: $regPath" -ForegroundColor Yellow
+    New-Item -Path $regPath -Force | Out-Null
+}
+
+# Set the registry value
+Set-ItemProperty -Path $regPath -Name $regName -Value $regValue
+Write-Host "LDAP Client Signing Requirements set to 'Negotiate signing' successfully." -ForegroundColor Green
