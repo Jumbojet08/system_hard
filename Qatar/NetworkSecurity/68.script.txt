@@ -1,2 +1,13 @@
-# Enable Turn off downloading of print drivers over HTTP
-Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows NT\Printers" -Name "NoHttpPrint" -Value 1
+$regPath = "HKLM:\Software\Policies\Microsoft\Windows NT\Printers"
+$regName = "NoHttpPrint"
+$regValue = 1
+
+# Check if the registry path exists; if not, create it
+if (-not (Test-Path $regPath)) {
+    Write-Host "Registry path not found. Creating: $regPath" -ForegroundColor Yellow
+    New-Item -Path $regPath -Force | Out-Null
+}
+
+# Set the registry value
+Set-ItemProperty -Path $regPath -Name $regName -Value $regValue
+Write-Host "Turn off downloading of print drivers over HTTP has been enabled." -ForegroundColor Green
