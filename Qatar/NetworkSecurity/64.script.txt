@@ -1,3 +1,12 @@
-# Disable Mapper I/O (LLTDIO) Driver
-Set-Service -Name "lltdsvc" -StartupType Disabled
-Stop-Service -Name "lltdsvc" -Force
+Write-Host "Disabling Link-Layer Topology Discovery Mapper and Responder..." -ForegroundColor Yellow
+
+# Disable LLTD Mapper I/O Driver
+Set-Service -Name "lltdsvc" -StartupType Disabled -ErrorAction SilentlyContinue
+Stop-Service -Name "lltdsvc" -Force -ErrorAction SilentlyContinue
+Write-Host "LLTD Responder service disabled." -ForegroundColor Green
+
+# Disable LLTDIO (Driver)
+Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\lltdio" -Name "Start" -Value 4
+Write-Host "LLTDIO driver disabled." -ForegroundColor Green
+
+Write-Host "LLTD (Mapper and Responder) has been disabled." -ForegroundColor Cyan
