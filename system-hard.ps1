@@ -1,12 +1,128 @@
-$resultsFile = "C:\Users\082820\Downloads\SecurityCheckResults.txt"
-$auditpolFile = "C:\Windows\Temp\auditpol.txt"
+$tempPath = $env:windir + "\Temp"
+$resultsFile = Join-Path -Path $tempPath -ChildPath "SecurityCheckResults.txt"
 
-# Create results array
+if (-not (Test-Path -Path $resultsFile)) {
+    New-Item -ItemType File -Path $resultsFile -Force
+}
+
+$auditpolFile = Join-Path -Path $tempPath -ChildPath "auditpol.txt"
+
 $results = @()
 $totalChecks = 0
 $passedChecks = 0
 
-# Function to add result to results array
+# Add after your initial variables
+$checkedPolicies = @{}
+
+# Create a mapping dictionary
+$policyNameMapping = @{
+    "Remove all unnecessary programs and applications" = "RemoveUnneededProgramsApps"
+    "Disable Telnet service" = "DisableUnneededServicesTelnetTFTPRemoteRegistry"
+    "Disable TFTP service" = "DisableUnneededServicesTelnetTFTPRemoteRegistry"
+    "Disable Remote Registry service" = "DisableUnneededServicesTelnetTFTPRemoteRegistry"
+    "Configure standard user accounts" = "ConfigureStandardUserAccountsPerAccessControlFramework"
+    "Restrict standard users from underlying OS configs" = "RestrictStandardUsersFromUnderlyingOsConfigs"
+    "Disable USB ports for standard users" = "DisableAllUsbPortsForStandardUsersUnlessNeeded"
+    "Disable CD-ROM drives for standard users" = "DisableCdRomDrivesForStandardUsers"
+    "Configure administrator accounts" = "ConfigureAdminAccountsPerAccessControlFramework"
+    "Disable 'Autorun' capability for all external media" = "DisableAutorunForExternalMedia"
+    "Security Option: Interactive Logon - Do not display last user name" = "SecurityInteractiveLogonDontDisplayLastUserName"
+    "Enable and configure Windows firewall" = "EnableWindowsFirewallForNeededProgramsPortsProtocols"
+    "Deploy and configure security software" = "DeploySecuritySoftwareAntiVirusWhitelistingPerOpsMaintFramework"
+    "Configure auditing and logging" = "ConfigureAuditingLoggingPerOpsMaintFramework"
+    "Configure password policies" = "ConfigurePasswordPoliciesPerAccessControlFramework"
+    "Rename built-in administrator account" = "RenameBuiltInAdminAccounts"
+    "Disable built-in guest account" = "DisableBuiltInGuestAccount"
+    "Configure non-human service accounts to disallow interactive logins" = "DisableInteractiveLoginsForNonHumanServiceAccounts"
+    "Set the 'Limit local account use of blank passwords to console logon only' right to Enable" = "LimitBlankPasswordsForConsoleLogonEnable"
+    "Set UAC to highest level" = "TurnOnUacToHighestLevelAlwaysNotify"
+    "Set 'Admin Approval Mode for the built-in Administrator account' to Enabled" = "AdminApprovalModeForBuiltInAdminAccountEnabled"
+    "Set 'Behavior of the elevation prompt for standard users' to 'Prompt for credentials on the secure desktop'" = "ElevationPromptForStandardUsersCredentialsOnSecureDesktop"
+    "Set 'Detect application installations and prompt for elevation' to Enabled" = "DetectAppInstallsPromptForElevationEnabled"
+    "Set 'Only elevate UIAccess applications that are installed in secure locations' to Enabled" = "ElevateUIAccessAppsInSecureLocationsEnabled"
+    "Set 'Virtualize file and registry write failures to per-user locations' to Enabled" = "VirtualizeFileRegistryWritesToPerUserLocationsEnabled"
+    "Set the 'Do not require CTRL+ALT+DEL' policy setting to Disabled" = "DontRequireCtrlAltDelDisabled"
+    "Configure the logon message title and text for users attempting to log on" = "MessageTitleForLogonAttemptsDisplayWarningBanner"
+    "Set 'Message Text for users attempting to log on'" = "SecurityInteractiveLogonMessageTextForLogonAttempts"
+    "Disable LAN Manager hash use and enable NTLMv2" = "DisableLanManagerHashIfPossibleEnableNtlmv2"
+    "Do not store LAN Manager hash on next password change" = "DontStoreLanManagerHashOnNextPasswordChangeDisabled"
+    "Set the 'Do not allow anonymous enumeration of SAM accounts and shares' policy setting to Enabled" = "DontAllowAnonymousEnumerationOfSamAcctsSharesEnabled"
+    "Remove the 'Act as part of the operating system' right from all accounts" = "RemoveActAsOsRightFromAccountsGroupsUnlessNeeded"
+    "Remove the 'Debug programs' right from all accounts unless necessary" = "RemoveDebugProgramsRightFromAccountsGroupsUnlessNeeded"
+    "Restrict 'Access this computer from the network' right" = "RemoveAccessThisComputerFromWorkstationsHmisUnlessNeeded"
+    "Restrict the 'Force Shutdown from a Remote System' policy to administrators" = "RestrictForceShutdownToAdminGroupUsersWithNeed"
+    "Set the 'Recovery Console: Allow automatic administrative logon' policy setting to Disabled" = "RecoveryConsoleDisableAutomaticAdminLogon"
+    "Configure NTP" = "ConfigureNtp"
+    "Disable unused network adapters" = "DisableUnusedNetworkAdapters"
+    "Configure logon banner" = "LoginBanner"
+    "Check network security settings" = "SecurityMsNetworkClientEnableDigitallySignedCommsAlways"
+    "Network Security - Digital Signing and NTLM SSP Settings" = "SecurityNetworkSecuritySetMinSessionSecurityForNtlmSspClients"
+    "Check device installation settings" = "DeviceInstallAllowAdminsToOverrideInstallRestrictions"
+    "Check removable storage access" = "RemovableStorageDenyAllRemovableStorageAccess"
+    "Check network settings" = "DnsClientEnableTurnOffMulticastNameResolution"
+    "Check remote assistance settings" = "RemoteAssistanceDisableConfigureOfferRemoteAssistance"
+    "Check PowerShell settings" = "WindowsPowerShellTurnOnModuleLogging"
+    "Check PowerShell script block logging" = "WindowsPowerShellTurnOnPowerShellScriptBlockLogging"
+    "Check PowerShell transcription" = "WindowsPowerShellTurnOnPowerShellTranscription"
+    "Check PowerShell lockdown policy" = "EnvironmentVariableSectionDefineValueForPSLockdownPolicyRestricted"
+    "Check IPv6 settings" = "DisableIpv6ForAllAdaptors"
+    "Check NetBIOS settings" = "DisableNetbiosOverTcpIpForAllNetworkAdaptorsThatHaveIpEnabled"
+    "Check SMB settings" = "DisableSmbVersion1"
+    "Check internet resource contact" = "ComputersWillBeConfiguredToNotContactInternetResources"
+    "Check machine account password settings" = "DisableRefuseMachineAccountPasswordChanges"
+    "Check secure channel settings" = "EnableDigitallyEncryptOrSignSecureChannelDataAlways"
+    "Check session key settings" = "EnableRequireStrongSessionKey"
+    "Check system shutdown settings" = "DisableAllowSystemToBeShutDownWithoutHavingToLogOn"
+    "Check elevation prompt behavior" = "DenyBehaviorOfTheElevationPromptForStandardUsers"
+    "Check font provider settings" = "DisableEnableFontProviders"
+    "Check guest logon settings" = "DisableEnableInsecureGuestLogons"
+    "Check mapper I/O settings" = "DisableTurnOnMapperIoLltddioDriver"
+    "Check responder driver settings" = "DisableTurnOnResponderRspndrDriver"
+    "Check group policy refresh settings" = "DisableTurnOffBackgroundRefreshOfGroupPolicy"
+    "Check print driver download settings" = "EnableTurnOffDownloadingOfPrintDriversOverHttp"
+    "Check internet connection wizard settings" = "EnableTurnOffInternetConnectionWizardIfUrlReferringMicrosoftCom"
+    "Check internet download settings" = "EnableTurnOffInternetDownloadForWebPublishingOnlineOrdering"
+    "Check HTTP printing settings" = "EnableTurnOffPrintingOverHttp"
+    "Check point and print restrictions" = "EnablePointAndPrintRestrictionsWhenInstallingNewDrivers"
+    "Check point and print driver update restrictions" = "EnablePointAndPrintRestrictionsWhenUpdatingDrivers"
+    "Check printer driver installation restrictions" = "EnableLimitPrintDriverInstallationToAdministrators"
+    "Check device driver installation restrictions" = "EnableDevicesPreventUsersFromInstallingPrinterDrivers"
+    "Check registration wizard settings" = "EnableTurnOffRegistrationIfUrlReferringToMicrosoftCom"
+    "Check search companion settings" = "EnableTurnOffSearchCompanionContentFileUpdates"
+    "Check picture ordering settings" = "EnableTurnOffTheOrderPrintsPictureTask"
+    "Check web publishing settings" = "EnableTurnOffThePublishToWebTaskForFilesAndFolders"
+    "Check Windows Messenger settings" = "EnableTurnOffTheWindowsMessengerCustomerExpImprovementProgram"
+    "Check Windows Customer Experience settings" = "EnableTurnOffWindowsCustomerExpImprovementProgram"
+    "Check Windows Error Reporting settings" = "EnableTurnOffWindowsErrorReporting"
+    "Check device authentication settings" = "EnableSupportDeviceAuthenticationUsingCertificate"
+    "Check app notifications settings" = "EnableTurnOffAppNotificationsOnTheLockScreen"
+    "Check picture password settings" = "EnableTurnOffPicturePasswordSignIn"
+    "Check PIN sign-in settings" = "DisableTurnOnConveniencePinSignIn"
+    "Check Windows NTP client settings" = "EnableWindowsNtpClient"
+    "Check app data sharing settings" = "DisableAllowAWindowsAppToShareApplicationData"
+    "Check Microsoft account settings" = "EnableAllowMicrosoftAccountsToBeOptional"
+    "Check password reveal settings" = "EnableDoNotDisplayThePasswordRevealButton"
+    "Check COM port redirection settings" = "EnableDoNotAllowComPortRedirection"
+    "Check RDP password prompt settings" = "EnableAlwaysPromptClientForPasswordUponConnection"
+    "Check device redirection settings" = "DoNotAllowSupportedPlugAndPlayDeviceRedirection"
+    "Check RPC communication settings" = "EnableRequireSecureRpcCommunication"
+    "Check temporary folder deletion settings" = "DisableDoNotDeleteTempFoldersUponExit"
+    "Check temporary folder session settings" = "EnableDoNotUseTemporaryFoldersPerSession"
+    "Check Microsoft Maps settings" = "DisableJoinMicrosoftMaps"
+    "Check Windows Ink Workspace settings" = "DisableAllowSuggestedAppsInWindowsInkWorkspace"
+    "Check Windows Ink settings" = "DisableAllowWindowsInkWorkspace"
+    "Check codec download settings" = "EnablePreventCodecDownload"
+    "Check drive redirection settings" = "VerifyDriveRedirectionIsNotConfiguredByDefault"
+    "Check RDP password saving settings" = "EnableDoNotAllowPasswordsToBeSavedInGpoForRemoteDesktop"
+    "Check RDP session time limit settings" = "EnableSetTimeLimitForActiveButIdleRemoteDesktopSessions15Mins"
+    "Check Recycle Bin settings" = "RecycleBinSettingFilesDeletedAfter7DaysRestrictRecycleBinStorage"
+    "Check administrator enumeration settings" = "DisableEnumerateAdministratorAccountsOnElevation"
+    "Check Internet Explorer settings" = "DisableInternetExplorerOnUnnecessaryWorkstationsEtc"
+    "Check SmartScreen settings" = "ActivateSmartScreenViaMicrosoftDefenderEtcManagedByGroupPolicy"
+    "Check FTP settings" = "DisableAnonymousFtpFileShareOnWindowsMachine"
+    "Check Windows Store settings" = "DisableWindowsStoreOnUnnecessaryWorkstationsEtc"  }
+
+# Modify the Add-Result function to prevent duplicates
 function Add-Result {
     param (
         [string]$Description,
@@ -14,1438 +130,33 @@ function Add-Result {
         [string]$Details = ""
     )
     
+    # Skip if this policy has already been checked
+    if ($checkedPolicies.ContainsKey($Description)) {
+        return
+    }
+    
     $global:totalChecks++
     if ($Status -eq "Applied") {
         $global:passedChecks++
     }
     
+    $policyName = if ($policyNameMapping.ContainsKey($Description)) {
+        $policyNameMapping[$Description]
+    } else {
+        $Description
+    }
+    
     $result = [PSCustomObject]@{
-        Description = $Description
+        Description = $policyName
         Status = $Status
         Details = $Details
     }
     
     $global:results += $result
+    $checkedPolicies[$Description] = $true
 }
 
-#   
-# Function to check local security policy
-function Check-SecurityPolicy {
-    param (
-        [string]$PolicyArea,
-        [string]$PolicyName,
-        [string]$ExpectedValue,
-        [string]$Description
-    )
-    
-    try {
-        # Use secedit to export just the requested area
-        $tempFile = "C:\Windows\Temp\secedit_$($PolicyArea).txt"
-        secedit /export /areas $PolicyArea /cfg $tempFile | Out-Null
-        
-        if (Test-Path $tempFile) {
-            $content = Get-Content -Path $tempFile -Raw
-            
-            if ($content -match "$PolicyName\s*=\s*(.+)") {
-                $actualValue = $matches[1].Trim()
-                $details = "Expected: $ExpectedValue, Found: $actualValue"
-                
-                if ($actualValue -eq $ExpectedValue) {
-                    Add-Result -Description $Description -Status "Applied" -Details $details
-                } else {
-                    Add-Result -Description $Description -Status "Not Applied" -Details $details
-                }
-            } else {
-                Add-Result -Description $Description -Status "Not Found" -Details "Policy not found in security configuration"
-            }
-            
-            Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
-        } else {
-            Add-Result -Description $Description -Status "Error" -Details "Failed to export security policy area"
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking security policy: $_"
-    }
-}
-
-# Function to check group policy setting
-function Check-GroupPolicy {
-    param (
-        [string]$GPOPath,
-        [string]$ExpectedValue,
-        [string]$Description
-    )
-    
-    try {
-        # Use gpresult to get applied policies
-        $tempFile = "C:\Windows\Temp\gpresult.txt"
-        gpresult /f /scope computer > $tempFile
-        
-        if (Test-Path $tempFile) {
-            $content = Get-Content -Path $tempFile -Raw
-            
-            if ($content -match [regex]::Escape($GPOPath) + ".*?:\s*(.+)") {
-                $actualValue = $matches[1].Trim()
-                $details = "Expected: $ExpectedValue, Found: $actualValue"
-                
-                if ($actualValue -match $ExpectedValue) {
-                    Add-Result -Description $Description -Status "Applied" -Details $details
-                } else {
-                    Add-Result -Description $Description -Status "Not Applied" -Details $details
-                }
-            } else {
-                Add-Result -Description $Description -Status "Not Found" -Details "Group Policy setting not found"
-            }
-            
-            Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
-        } else {
-            Add-Result -Description $Description -Status "Error" -Details "Failed to retrieve Group Policy results"
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking Group Policy: $_"
-    }
-}
-
-# Function to check if a service is disabled
-function Check-ServiceDisabled {
-    param (
-        [string]$ServiceName,
-        [string]$Description
-    )
-    
-    try {
-        $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-        
-        if ($null -eq $service) {
-            Add-Result -Description $Description -Status "Not Installed" -Details "Service is not installed"
-        } else {
-            $status = $service.StartType
-            $details = "Current status: $status"
-            
-            if ($status -eq "Disabled") {
-                Add-Result -Description $Description -Status "Applied" -Details $details
-            } else {
-                Add-Result -Description $Description -Status "Not Applied" -Details $details
-            }
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking service: $_"
-    }
-}
-
-# Function to check for USB storage restrictions using registry
-function Check-USBStorageRestrictions {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        # Check multiple methods of USB storage restriction
-        $methodsChecked = @()
-        $methodsApplied = @()
-        
-        # Method 1: Check if USBSTOR service is disabled
-        $usbstorService = Get-Service -Name "USBSTOR" -ErrorAction SilentlyContinue
-        $methodsChecked += "USBSTOR Service"
-        if ($null -ne $usbstorService -and $usbstorService.StartType -eq "Disabled") {
-            $methodsApplied += "USBSTOR Service Disabled"
-        }
-        
-        # Method 2: Check Group Policy for USB storage device restriction
-        $gpoPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices\Deny_All"
-        $denyAll = Get-ItemProperty -Path $gpoPath -Name "Deny" -ErrorAction SilentlyContinue
-        $methodsChecked += "Group Policy Restriction"
-        if ($null -ne $denyAll -and $denyAll.Deny -eq 1) {
-            $methodsApplied += "Group Policy Restriction Applied"
-        }
-        
-        # Method 3: Check device installation restrictions
-        $deviceInstallPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions"
-        $denyDeviceInstall = Get-ItemProperty -Path $deviceInstallPath -Name "DenyRemovableDevices" -ErrorAction SilentlyContinue
-        $methodsChecked += "Device Installation Restriction"
-        if ($null -ne $denyDeviceInstall -and $denyDeviceInstall.DenyRemovableDevices -eq 1) {
-            $methodsApplied += "Device Installation Restriction Applied"
-        }
-        
-        if ($methodsApplied.Count -gt 0) {
-            Add-Result -Description $Description -Status "Applied" -Details "Restrictions found: $($methodsApplied -join ", ")"
-        } else {
-            Add-Result -Description $Description -Status "Not Applied" -Details "No USB storage restrictions found. Methods checked: $($methodsChecked -join ", ")"
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking USB restrictions: $_"
-    }
-}
-
-# Function to check for CD-ROM restrictions using registry
-function Check-CDROMRestrictions {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        # Check multiple methods of CD-ROM restriction
-        $methodsChecked = @()
-        $methodsApplied = @()
-        
-        # Method 1: Check CD-ROM service startup type
-        $cdromService = Get-Service -Name "cdrom" -ErrorAction SilentlyContinue
-        $methodsChecked += "CDROM Service"
-        if ($null -ne $cdromService -and $cdromService.StartType -eq "Disabled") {
-            $methodsApplied += "CDROM Service Disabled"
-        }
-        
-        # Method 2: Check Group Policy for CD-ROM restriction
-        $gpoPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices\CD-ROM"
-        $denyCD = Get-ItemProperty -Path $gpoPath -Name "Deny" -ErrorAction SilentlyContinue
-        $methodsChecked += "Group Policy Restriction"
-        if ($null -ne $denyCD -and $denyCD.Deny -eq 1) {
-            $methodsApplied += "Group Policy Restriction Applied"
-        }
-        
-        # Method 3: Check for access restriction via registry
-        $accessPath = "HKLM\SYSTEM\CurrentControlSet\Services\cdrom\Parameters"
-        $autorun = Get-ItemProperty -Path $accessPath -Name "AutoRun" -ErrorAction SilentlyContinue
-        $methodsChecked += "Registry Access Restriction"
-        if ($null -ne $autorun -and $autorun.AutoRun -eq 0) {
-            $methodsApplied += "Registry Access Restriction Applied"
-        }
-        
-        if ($methodsApplied.Count -gt 0) {
-            Add-Result -Description $Description -Status "Applied" -Details "Restrictions found: $($methodsApplied -join ", ")"
-        } else {
-            Add-Result -Description $Description -Status "Not Applied" -Details "No CD-ROM restrictions found. Methods checked: $($methodsChecked -join ", ")"
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking CD-ROM restrictions: $_"
-    }
-}
-
-# Function to check for unnecessary programs
-function Check-UnnecessaryPrograms {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        $unwantedPrograms = @(
-            "TeamViewer", "uTorrent", "AnyDesk", "Skype", "Zoom", 
-            "BitTorrent", "Limewire", "TorrentClient", "Remote Utilities",
-            "LogMeIn", "Chrome Remote Desktop", "VNC", "TightVNC", "UltraVNC"
-        )
-        
-        $installed = @()
-        $installed += Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | 
-                     Where-Object DisplayName -ne $null | 
-                     Select-Object DisplayName
-        $installed += Get-ItemProperty HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | 
-                     Where-Object DisplayName -ne $null | 
-                     Select-Object DisplayName
-        
-        $found = @($installed | Where-Object { $unwantedPrograms -contains $_.DisplayName })
-        
-        if ($found.Count -eq 0) {
-            Add-Result -Description $Description -Status "Applied" -Details "No unnecessary programs found"
-        } else {
-            $programList = ($found.DisplayName -join ", ")
-            Add-Result -Description $Description -Status "Not Applied" -Details "Found: $programList"
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking programs: $_"
-    }
-}
-
-# Function to check user accounts
-function Check-UserAccounts {
-    param (
-        [string]$Description,
-        [string]$AccountType
-    )
-    
-    try {
-        if ($AccountType -eq "Admin") {
-            # Use ADSI instead of Get-LocalGroupMember
-            $adminGroup = [ADSI]"WinNT://$env:COMPUTERNAME/Administrators"
-            $adminUsers = @()
-            
-            $adminGroup.Members() | ForEach-Object {
-                try {
-                    $adminUsers += $_.GetType().InvokeMember("Name", 'GetProperty', $null, $_, $null)
-                } catch {
-                    # Skip failed member retrievals
-                }
-            }
-            
-            Add-Result -Description $Description -Status "Applied" -Details "Found $($adminUsers.Count) admin users"
-        }
-        elseif ($AccountType -eq "Standard") {
-            # Get all local users
-            $allUsers = Get-WmiObject -Class Win32_UserAccount -Filter "LocalAccount='True'"
-            $adminGroup = [ADSI]"WinNT://$env:COMPUTERNAME/Administrators"
-            $adminUsers = @()
-            
-            $adminGroup.Members() | ForEach-Object {
-                try {
-                    $adminUsers += $_.GetType().InvokeMember("Name", 'GetProperty', $null, $_, $null)
-                } catch {
-                    # Skip failed member retrievals
-                }
-            }
-            
-            $standardUsers = $allUsers | Where-Object { $adminUsers -notcontains $_.Name -and $_.Disabled -eq $false }
-            Add-Result -Description $Description -Status "Applied" -Details "Found $($standardUsers.Count) enabled standard users"
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking user accounts: $_"
-    }
-}
-
-# Function to check if built-in admin is renamed
-function Check-AdminRenamed {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        # Use WMI to find built-in administrator account (SID ending in 500)
-        $adminAccount = Get-WmiObject -Class Win32_UserAccount -Filter "LocalAccount='True' AND SID LIKE '%-500'"
-        
-        if ($null -eq $adminAccount) {
-            Add-Result -Description $Description -Status "Error" -Details "Could not find built-in administrator account"
-        } else {
-            if ($adminAccount.Name -eq "Administrator") {
-                Add-Result -Description $Description -Status "Not Applied" -Details "Built-in administrator account not renamed"
-            } else {
-                Add-Result -Description $Description -Status "Applied" -Details "Built-in administrator account renamed to: $($adminAccount.Name)"
-            }
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking admin account: $_"
-    }
-}
-
-# Function to check if guest account is disabled
-function Check-GuestDisabled {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        # Use WMI to find built-in guest account (SID ending in 501)
-        $guestAccount = Get-WmiObject -Class Win32_UserAccount -Filter "LocalAccount='True' AND SID LIKE '%-501'"
-        
-        if ($null -eq $guestAccount) {
-            Add-Result -Description $Description -Status "Error" -Details "Could not find built-in guest account"
-        } else {
-            if ($guestAccount.Disabled) {
-                Add-Result -Description $Description -Status "Applied" -Details "Guest account is disabled"
-            } else {
-                Add-Result -Description $Description -Status "Not Applied" -Details "Guest account is enabled"
-            }
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking guest account: $_"
-    }
-}
-
-# Function to check network adapters
-function Check-NetworkAdapters {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        $adapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
-        $disabledAdapters = Get-NetAdapter | Where-Object { $_.Status -eq "Disabled" }
-        
-        if ($adapters.Count -eq 0) {
-            Add-Result -Description $Description -Status "Error" -Details "No network adapters are up (system would be inaccessible)"
-        } else {
-            $unusedAdapters = $adapters | Where-Object { $_.MediaConnectionState -eq "Disconnected" }
-            
-            if ($unusedAdapters.Count -eq 0) {
-                Add-Result -Description $Description -Status "Applied" -Details "No unused adapters found in 'Up' state"
-            } else {
-                Add-Result -Description $Description -Status "Not Applied" -Details "Found $($unusedAdapters.Count) disconnected adapters still enabled"
-            }
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking network adapters: $_"
-    }
-}
-
-# Function to check firewall status
-function Check-Firewall {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        $firewallProfiles = Get-NetFirewallProfile
-        $enabledProfiles = $firewallProfiles | Where-Object { $_.Enabled -eq $true }
-        
-        if ($enabledProfiles.Count -eq $firewallProfiles.Count) {
-            Add-Result -Description $Description -Status "Applied" -Details "All firewall profiles are enabled"
-        } else {
-            $disabledProfiles = ($firewallProfiles | Where-Object { $_.Enabled -eq $false }).Name -join ", "
-            Add-Result -Description $Description -Status "Not Applied" -Details "Disabled profiles: $disabledProfiles"
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking firewall: $_"
-    }
-}
-
-# Function to check password policies
-function Check-PasswordPolicies {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        # Use net accounts to get password policy
-        $passwordPolicyOutput = net accounts
-        
-        # Extract relevant settings using regex
-        $minLength = if ($passwordPolicyOutput -match "Minimum password length\s+:\s+(\d+)") { [int]$Matches[1] } else { 0 }
-        $maxAge = if ($passwordPolicyOutput -match "Maximum password age \(days\)\s+:\s+(\d+)") { [int]$Matches[1] } else { 0 }
-        $minAge = if ($passwordPolicyOutput -match "Minimum password age \(days\)\s+:\s+(\d+)") { [int]$Matches[1] } else { 0 }
-        $history = if ($passwordPolicyOutput -match "Length of password history maintained\s+:\s+(\d+)") { [int]$Matches[1] } else { 0 }
-        $lockoutThreshold = if ($passwordPolicyOutput -match "Lockout threshold\s+:\s+(\d+|Never)") { $Matches[1] } else { "Unknown" }
-        
-        # Check complexity using registry
-        $complexityPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
-        $complexity = (Get-ItemProperty -Path $complexityPath -Name "PasswordComplexity" -ErrorAction SilentlyContinue).PasswordComplexity
-        $complexityStatus = if ($complexity -eq 1) { "Enabled" } else { "Disabled" }
-        
-        # Determine if policies meet requirements (adjust thresholds as needed)
-        $details = "Min Length: $minLength, Max Age: $maxAge, Min Age: $minAge, History: $history, Lockout: $lockoutThreshold, Complexity: $complexityStatus"
-        
-        if ($minLength -ge 12 -and $maxAge -le 90 -and $minAge -ge 1 -and $history -ge 5 -and $lockoutThreshold -ne "Never" -and $complexity -eq 1) {
-            Add-Result -Description $Description -Status "Applied" -Details $details
-        } else {
-            Add-Result -Description $Description -Status "Not Applied" -Details $details
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking password policies: $_"
-    }
-}
-
-# Function to check security software
-function Check-SecuritySoftware {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        # Check for antivirus using multiple methods
-        $avFound = $false
-        $avName = "None"
-        
-        # Method 1: Check Windows Security Center
-        try {
-            $avProducts = Get-WmiObject -Namespace "root\SecurityCenter2" -Class AntiVirusProduct -ErrorAction SilentlyContinue
-            if ($null -ne $avProducts -and $avProducts.Count -gt 0) {
-                $avFound = $true
-                $avName = ($avProducts | ForEach-Object { $_.displayName }) -join ", "
-            }
-        } catch {
-            # Continue to next method if this fails
-        }
-        
-        # Method 2: Check Windows Defender status if no other AV found
-        if (-not $avFound) {
-            $defenderPath = "HKLM:\SOFTWARE\Microsoft\Windows Defender"
-            $defenderStatus = Get-ItemProperty -Path $defenderPath -ErrorAction SilentlyContinue
-            
-            if ($null -ne $defenderStatus) {
-                $avFound = $true
-                $avName = "Windows Defender"
-            }
-        }
-        
-        # Check for application whitelisting (AppLocker or WDAC)
-        $whitelistingFound = $false
-        $whitelistingName = "None"
-        
-        # Check AppLocker
-        $appLockerService = Get-Service -Name "AppIDSvc" -ErrorAction SilentlyContinue
-        $appLockerPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\SrpV2"
-        
-        if (($null -ne $appLockerService -and $appLockerService.Status -eq "Running") -or 
-            (Test-Path $appLockerPath)) {
-            $whitelistingFound = $true
-            $whitelistingName = "AppLocker"
-        }
-        
-        # Check WDAC (Windows Defender Application Control)
-        $wdacPolicies = Get-ChildItem -Path "C:\Windows\System32\CodeIntegrity\CiPolicies\Active\" -ErrorAction SilentlyContinue
-        if ($null -ne $wdacPolicies -and $wdacPolicies.Count -gt 0) {
-            $whitelistingFound = $true
-            $whitelistingName = "Windows Defender Application Control"
-        }
-        
-        if ($avFound -and $whitelistingFound) {
-            Add-Result -Description $Description -Status "Applied" -Details "AV: $avName, Application Whitelisting: $whitelistingName"
-        } else {
-            $missing = @()
-            if (-not $avFound) { $missing += "Antivirus" }
-            if (-not $whitelistingFound) { $missing += "Application Whitelisting" }
-            
-            Add-Result -Description $Description -Status "Not Applied" -Details "Missing: $($missing -join ", "). Found: AV: $avName, Whitelisting: $whitelistingName"
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking security software: $_"
-    }
-}
-
-# Function to check auditing policies
-function Check-AuditingPolicies {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        # Use PowerShell to check audit policies
-        $categories = @(
-            "Account Logon",
-            "Account Management",
-            "Logon/Logoff",
-            "Object Access",
-            "Policy Change",
-            "Privilege Use",
-            "System"
-        )
-        
-        $missingPolicies = @()
-        
-        foreach ($category in $categories) {
-            $result = auditpol /get /category:$category 2>$null
-            if ($result -notmatch "Success and Failure") {
-                $missingPolicies += $category
-            }
-        }
-        
-        if ($missingPolicies.Count -eq 0) {
-            Add-Result -Description $Description -Status "Applied" -Details "All required audit policies are configured"
-        } else {
-            Add-Result -Description $Description -Status "Not Applied" -Details "Missing policies: $($missingPolicies -join ', ')"
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking audit policies: $_"
-    }
-}
-
-# Function to check non-interactive service accounts
-function Check-ServiceAccounts {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        $serviceAccounts = Get-WmiObject -Class Win32_Service | 
-            Where-Object { $_.StartName -notmatch 'LocalSystem|NT AUTHORITY|NT SERVICE' -and $_.StartName -ne "" } | 
-            Select-Object DisplayName, StartName
-        
-        if ($serviceAccounts.Count -eq 0) {
-            Add-Result -Description $Description -Status "Not Applicable" -Details "No custom service accounts found"
-        } else {
-            # Check if these accounts are in the "Deny log on locally" security setting
-            $denyLogonPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
-            $denyLogonAccounts = (Get-ItemProperty -Path $denyLogonPath -Name "DenyLogonLocallyName" -ErrorAction SilentlyContinue).DenyLogonLocallyName
-            
-            $nonCompliantAccounts = @()
-            foreach ($account in $serviceAccounts) {
-                $accountName = ($account.StartName -split '\\')[-1]
-                if ($null -eq $denyLogonAccounts -or $denyLogonAccounts -notcontains $accountName) {
-                    $nonCompliantAccounts += "$($account.DisplayName) ($($account.StartName))"
-                }
-            }
-            
-            if ($nonCompliantAccounts.Count -eq 0) {
-                Add-Result -Description $Description -Status "Applied" -Details "All service accounts are restricted from interactive login"
-            } else {
-                Add-Result -Description $Description -Status "Not Applied" -Details "Service accounts not restricted: $($nonCompliantAccounts -join ", ")"
-            }
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking service accounts: $_"
-    }
-}
-
-# Function to check NTP configuration
-function Check-NTPConfiguration {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        # Check Windows Time service
-        $timeService = Get-Service -Name "W32Time" -ErrorAction SilentlyContinue
-        
-        # Get NTP settings using registry
-        $ntpParams = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters" -ErrorAction SilentlyContinue
-        $ntpConfig = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Config" -ErrorAction SilentlyContinue
-        
-        $details = @()
-        
-        # Check service status
-        if ($timeService) {
-            $details += "Service Status: $($timeService.Status)"
-        } else {
-            $details += "Service Status: Not Found"
-        }
-        
-        # Check NTP server
-        if ($ntpParams.NtpServer) {
-            $details += "NTP Server: $($ntpParams.NtpServer)"
-        } else {
-            $details += "NTP Server: Not Configured"
-        }
-        
-        # Check sync type
-        if ($ntpParams.Type) {
-            $details += "Sync Type: $($ntpParams.Type)"
-        }
-        
-        # Get current time source
-        $w32tmStatus = w32tm /query /status /verbose 2>$null
-        if ($w32tmStatus) {
-            $source = ($w32tmStatus | Select-String "Source:.*").ToString()
-            if ($source) {
-                $details += $source
-            }
-        }
-        
-        if ($timeService.Status -eq 'Running' -and $ntpParams.NtpServer) {
-            Add-Result -Description $Description -Status "Applied" -Details ($details -join ", ")
-        } else {
-            Add-Result -Description $Description -Status "Not Applied" -Details ($details -join ", ")
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking NTP: $_"
-    }
-}
-
-# Function to check User Account Control settings via registry
-function Check-UACSettings {
-    param (
-        [string]$Description,
-        [string]$RegistryName,
-        [int]$ExpectedValue
-    )
-    
-    try {
-        $uacPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
-        $actualValue = (Get-ItemProperty -Path $uacPath -Name $RegistryName -ErrorAction SilentlyContinue).$RegistryName
-        
-        if ($null -eq $actualValue) {
-            Add-Result -Description $Description -Status "Not Found" -Details "Setting not found in registry"
-        } else {
-            $details = "Expected: $ExpectedValue, Found: $actualValue"
-            
-            if ($actualValue -eq $ExpectedValue) {
-                Add-Result -Description $Description -Status "Applied" -Details $details
-            } else {
-                Add-Result -Description $Description -Status "Not Applied" -Details $details
-            }
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking UAC setting: $_"
-    }
-}
-
-# Function to check autorun settings
-function Check-AutorunSettings {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        $autorunPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer"
-        $autorunValue = (Get-ItemProperty -Path $autorunPath -Name "NoDriveTypeAutoRun" -ErrorAction SilentlyContinue).NoDriveTypeAutoRun
-        
-        if ($null -eq $autorunValue) {
-            Add-Result -Description $Description -Status "Not Found" -Details "Autorun setting not found in registry"
-        } else {
-            $details = "Expected: 255 (all drives), Found: $autorunValue"
-            
-            if ($autorunValue -eq 255) {
-                Add-Result -Description $Description -Status "Applied" -Details $details
-            } else {
-                Add-Result -Description $Description -Status "Not Applied" -Details $details
-            }
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking autorun settings: $_"
-    }
-}
-# Function to check security policy settings related to interactive logon
-function Check-InteractiveLogonPolicy {
-    param (
-        [string]$PolicyName,
-        [string]$ExpectedValue,
-        [string]$Description
-    )
-    
-    try {
-        # Convert registry path to proper format
-        $regPath = $PolicyName -replace '^MACHINE\\', 'HKLM:\\'
-        
-        # Get the registry value directly instead of using secedit
-        try {
-            $keyPath = Split-Path -Path $regPath
-            $valueName = Split-Path -Path $regPath -Leaf
-            
-            $actualValue = (Get-ItemProperty -Path $keyPath -Name $valueName -ErrorAction Stop).$valueName
-            $details = "Expected: $ExpectedValue, Found: $actualValue"
-            
-            if ($actualValue.ToString() -eq $ExpectedValue) {
-                Add-Result -Description $Description -Status "Applied" -Details $details
-            } else {
-                Add-Result -Description $Description -Status "Not Applied" -Details $details
-            }
-        }
-        catch {
-            Add-Result -Description $Description -Status "Not Found" -Details "Policy setting not found in registry"
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking security policy: $_"
-    }
-}
-
-# Function to check user right assignments
-function Check-UserRightAssignment {
-    param (
-        [string]$RightName,
-        [string]$Description,
-        [string[]]$AllowedAccounts = @(),
-        [bool]$ShouldBeEmpty = $false
-    )
-    
-    try {
-        # Use secedit to export user rights
-        $tempFile = "C:\Windows\Temp\secedit_rights.txt"
-        secedit /export /areas USER_RIGHTS /cfg $tempFile | Out-Null
-        
-        if (Test-Path $tempFile) {
-            $content = Get-Content -Path $tempFile -Raw
-            
-            if ($content -match "$RightName\s*=\s*(.+)") {
-                $accounts = $matches[1].Trim().Split(',').Trim()
-                $details = "Accounts with this right: $($accounts -join ', ')"
-                
-                if ($ShouldBeEmpty -and $accounts.Count -eq 0) {
-                    Add-Result -Description $Description -Status "Applied" -Details "No accounts have this right"
-                } 
-                elseif ($ShouldBeEmpty -and $accounts.Count -gt 0) {
-                    Add-Result -Description $Description -Status "Not Applied" -Details $details
-                }
-                elseif (-not $ShouldBeEmpty -and $AllowedAccounts.Count -gt 0) {
-                    $unauthorized = $accounts | Where-Object { $AllowedAccounts -notcontains $_ }
-                    
-                    if ($unauthorized.Count -eq 0) {
-                        Add-Result -Description $Description -Status "Applied" -Details "Only authorized accounts have this right"
-                    } else {
-                        Add-Result -Description $Description -Status "Not Applied" -Details "Unauthorized accounts: $($unauthorized -join ', ')"
-                    }
-                } else {
-                    Add-Result -Description $Description -Status "Applied" -Details $details
-                }
-            } else {
-                Add-Result -Description $Description -Status "Not Found" -Details "User right not found in security configuration"
-            }
-            
-            Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
-        } else {
-            Add-Result -Description $Description -Status "Error" -Details "Failed to export user rights"
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking user rights: $_"
-    }
-}
-
-# Function to check NTLM and LAN Manager settings
-function Check-NTLMSettings {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        $ntlmPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
-        $lmCompatLevel = (Get-ItemProperty -Path $ntlmPath -Name "LmCompatibilityLevel" -ErrorAction SilentlyContinue).LmCompatibilityLevel
-        $storeLMHash = (Get-ItemProperty -Path $ntlmPath -Name "NoLMHash" -ErrorAction SilentlyContinue).NoLMHash
-        
-        $details = "LM Compatibility Level: $lmCompatLevel, Don't store LM hash: $storeLMHash"
-        
-        # Level 5 = Send NTLMv2 only, refuse LM & NTLM
-        # NoLMHash = 1 means don't store LM hash on password change
-        if ($lmCompatLevel -ge 3 -and $storeLMHash -eq 1) {
-            Add-Result -Description $Description -Status "Applied" -Details $details
-        } else {
-            Add-Result -Description $Description -Status "Not Applied" -Details $details
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking NTLM settings: $_"
-    }
-}
-
-# Function to check additional UAC settings
-function Check-AdditionalUACSettings {
-    param (
-        [string]$RegistryName,
-        [string]$Description,
-        [int]$ExpectedValue
-    )
-    
-    try {
-        $uacPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
-        $actualValue = (Get-ItemProperty -Path $uacPath -Name $RegistryName -ErrorAction SilentlyContinue).$RegistryName
-        
-        if ($null -eq $actualValue) {
-            Add-Result -Description $Description -Status "Not Found" -Details "Setting not found in registry"
-        } else {
-            $details = "Expected: $ExpectedValue, Found: $actualValue"
-            
-            if ($actualValue -eq $ExpectedValue) {
-                Add-Result -Description $Description -Status "Applied" -Details $details
-            } else {
-                Add-Result -Description $Description -Status "Not Applied" -Details $details
-            }
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking UAC setting: $_"
-    }
-}
-
-# Function to check Recovery Console settings
-function Check-RecoveryConsoleSettings {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        $recoveryPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Setup\RecoveryConsole"
-        $autoAdminLogon = (Get-ItemProperty -Path $recoveryPath -Name "SecurityLevel" -ErrorAction SilentlyContinue).SecurityLevel
-        
-        if ($null -eq $autoAdminLogon) {
-            Add-Result -Description $Description -Status "Not Found" -Details "Recovery console setting not found"
-        } else {
-            $details = "Expected: 0 (Disabled), Found: $autoAdminLogon"
-            
-            if ($autoAdminLogon -eq 0) {
-                Add-Result -Description $Description -Status "Applied" -Details $details
-            } else {
-                Add-Result -Description $Description -Status "Not Applied" -Details $details
-            }
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking Recovery Console settings: $_"
-    }
-}
-
-# Function to check anonymous enumeration settings
-function Check-AnonymousEnumeration {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        $lsaPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
-        $restrictAnonymous = (Get-ItemProperty -Path $lsaPath -Name "RestrictAnonymous" -ErrorAction SilentlyContinue).RestrictAnonymous
-        $restrictAnonymousSAM = (Get-ItemProperty -Path $lsaPath -Name "RestrictAnonymousSAM" -ErrorAction SilentlyContinue).RestrictAnonymousSAM
-        
-        $details = "Restrict Anonymous: $restrictAnonymous, Restrict Anonymous SAM: $restrictAnonymousSAM"
-        
-        if ($restrictAnonymous -eq 1 -and $restrictAnonymousSAM -eq 1) {
-            Add-Result -Description $Description -Status "Applied" -Details $details
-        } else {
-            Add-Result -Description $Description -Status "Not Applied" -Details $details
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking anonymous enumeration settings: $_"
-    }
-}
-
-# Function to check logon banner settings
-function Check-LogonBanner {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        $bannerPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
-        $legalNoticeCaption = (Get-ItemProperty -Path $bannerPath -Name "legalnoticecaption" -ErrorAction SilentlyContinue).legalnoticecaption
-        $legalNoticeText = (Get-ItemProperty -Path $bannerPath -Name "legalnoticetext" -ErrorAction SilentlyContinue).legalnoticetext
-        
-        if ($null -eq $legalNoticeCaption -or $null -eq $legalNoticeText -or $legalNoticeCaption -eq "" -or $legalNoticeText -eq "") {
-            Add-Result -Description $Description -Status "Not Applied" -Details "Logon banner not configured"
-        } else {
-            $details = "Banner Title: $legalNoticeCaption"
-            Add-Result -Description $Description -Status "Applied" -Details $details
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking logon banner: $_"
-    }
-}
-
-# Function to check network security settings
-function Check-NetworkSecuritySettings {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        $securityPath = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
-        $ntlmPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0"
-        
-        # Check digital signing
-        $requireSign = (Get-ItemProperty -Path $securityPath -Name "RequireSecuritySignature" -ErrorAction SilentlyContinue).RequireSecuritySignature
-        
-        # Check NTLM SSP security
-        $ntlmSecurity = (Get-ItemProperty -Path $ntlmPath -Name "NTLMMinClientSec" -ErrorAction SilentlyContinue).NTLMMinClientSec
-        
-        $details = @()
-        $details += "Digital Signing Required: $($requireSign -eq 1)"
-        $details += "NTLM Min Security: $ntlmSecurity"
-        
-        if ($requireSign -eq 1 -and $ntlmSecurity -ge 537395200) {
-            Add-Result -Description $Description -Status "Applied" -Details ($details -join ", ")
-        } else {
-            Add-Result -Description $Description -Status "Not Applied" -Details ($details -join ", ")
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking network security settings: $_"
-    }
-}
-
-# Function to check device installation settings
-function Check-DeviceInstallationSettings {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        $devicePath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions"
-        
-        $adminOverride = (Get-ItemProperty -Path $devicePath -Name "AllowAdminInstall" -ErrorAction SilentlyContinue).AllowAdminInstall
-        $customMessage = (Get-ItemProperty -Path $devicePath -Name "DenyMessageText" -ErrorAction SilentlyContinue).DenyMessageText
-        $customTitle = (Get-ItemProperty -Path $devicePath -Name "DenyMessageTitle" -ErrorAction SilentlyContinue).DenyMessageTitle
-        
-        $details = @(
-            "Admin Override: $($adminOverride -eq 1)",
-            "Custom Message Configured: $(-not [string]::IsNullOrEmpty($customMessage))",
-            "Custom Title Configured: $(-not [string]::IsNullOrEmpty($customTitle))"
-        )
-        
-        if ($adminOverride -eq 1 -and -not [string]::IsNullOrEmpty($customMessage) -and -not [string]::IsNullOrEmpty($customTitle)) {
-            Add-Result -Description $Description -Status "Applied" -Details ($details -join ", ")
-        } else {
-            Add-Result -Description $Description -Status "Not Applied" -Details ($details -join ", ")
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking device installation settings: $_"
-    }
-}
-
-# Function to check removable storage access
-function Check-RemovableStorageAccess {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        $storagePath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices"
-        
-        $denyAll = (Get-ItemProperty -Path "$storagePath\Deny_All" -Name "Deny" -ErrorAction SilentlyContinue).Deny
-        $denyExecute = (Get-ItemProperty -Path "$storagePath\Deny_Execute" -Name "Deny" -ErrorAction SilentlyContinue).Deny
-        $denyCDDVD = (Get-ItemProperty -Path "$storagePath\CD_DVD" -Name "Deny" -ErrorAction SilentlyContinue).Deny
-        
-        $details = @(
-            "All Access Denied: $($denyAll -eq 1)",
-            "Execute Denied: $($denyExecute -eq 1)",
-            "CD/DVD Denied: $($denyCDDVD -eq 1)"
-        )
-        
-        if ($denyAll -eq 1 -and $denyExecute -eq 1 -and $denyCDDVD -eq 1) {
-            Add-Result -Description $Description -Status "Applied" -Details ($details -join ", ")
-        } else {
-            Add-Result -Description $Description -Status "Not Applied" -Details ($details -join ", ")
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking removable storage settings: $_"
-    }
-}
-
-# Function to check network settings
-function Check-NetworkSettings {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        # Check LLMNR setting
-        $llmnrPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient"
-        $llmnrDisabled = (Get-ItemProperty -Path $llmnrPath -Name "EnableMulticast" -ErrorAction SilentlyContinue).EnableMulticast -eq 0
-        
-        # Check Remote Assistance
-        $raPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Remote Assistance"
-        $raDisabled = (Get-ItemProperty -Path $raPath -Name "fAllowToGetHelp" -ErrorAction SilentlyContinue).fAllowToGetHelp -eq 0
-        
-        # Check IPv6
-        $adapters = Get-NetAdapter | Where-Object Status -eq "Up"
-        $ipv6Disabled = $true
-        foreach ($adapter in $adapters) {
-            if ((Get-NetAdapterBinding -InterfaceAlias $adapter.Name -ComponentID "ms_tcpip6").Enabled) {
-                $ipv6Disabled = $false
-                break
-            }
-        }
-        
-        # Check NetBIOS
-        $netbiosDisabled = $true
-        foreach ($adapter in $adapters) {
-            $netbiosSetting = Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object { $_.Index -eq $adapter.ifIndex }
-            if ($netbiosSetting.TcpipNetbiosOptions -ne 2) {
-                $netbiosDisabled = $false
-                break
-            }
-        }
-        
-        $details = @(
-            "LLMNR Disabled: $llmnrDisabled",
-            "Remote Assistance Disabled: $raDisabled",
-            "IPv6 Disabled: $ipv6Disabled",
-            "NetBIOS Disabled: $netbiosDisabled"
-        )
-        
-        if ($llmnrDisabled -and $raDisabled -and $ipv6Disabled -and $netbiosDisabled) {
-            Add-Result -Description $Description -Status "Applied" -Details ($details -join ", ")
-        } else {
-            Add-Result -Description $Description -Status "Not Applied" -Details ($details -join ", ")
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking network settings: $_"
-    }
-}
-
-# Function to check PowerShell settings
-function Check-PowerShellSettings {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        $psPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell"
-        
-        # Check Module Logging
-        $moduleLogging = (Get-ItemProperty -Path "$psPath\ModuleLogging" -Name "EnableModuleLogging" -ErrorAction SilentlyContinue).EnableModuleLogging
-        
-        # Check Script Block Logging
-        $scriptBlockLogging = (Get-ItemProperty -Path "$psPath\ScriptBlockLogging" -Name "EnableScriptBlockLogging" -ErrorAction SilentlyContinue).EnableScriptBlockLogging
-        
-        # Check Transcription
-        $transcription = (Get-ItemProperty -Path "$psPath\Transcription" -Name "EnableTranscripting" -ErrorAction SilentlyContinue).EnableTranscripting
-        
-        # Check PSLockdownPolicy
-        $lockdownPolicy = [Environment]::GetEnvironmentVariable("PSLockdownPolicy", "Machine")
-        
-        $details = @(
-            "Module Logging: $($moduleLogging -eq 1)",
-            "Script Block Logging: $($scriptBlockLogging -eq 1)",
-            "Transcription: $($transcription -eq 1)",
-            "Lockdown Policy: $lockdownPolicy"
-        )
-        
-        if ($moduleLogging -eq 1 -and $scriptBlockLogging -eq 1 -and $transcription -eq 1 -and $lockdownPolicy -eq 4) {
-            Add-Result -Description $Description -Status "Applied" -Details ($details -join ", ")
-        } else {
-            Add-Result -Description $Description -Status "Not Applied" -Details ($details -join ", ")
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking PowerShell settings: $_"
-    }
-}
-
-# Function to check SMB settings
-function Check-SMBSettings {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        $smbPath = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters"
-        $smbv1Enabled = (Get-ItemProperty -Path $smbPath -Name "SMB1" -ErrorAction SilentlyContinue).SMB1
-        
-        if ($null -eq $smbv1Enabled -or $smbv1Enabled -eq 0) {
-            Add-Result -Description $Description -Status "Applied" -Details "SMB v1 is disabled"
-        } else {
-            Add-Result -Description $Description -Status "Not Applied" -Details "SMB v1 is enabled"
-        }
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking SMB settings: $_"
-    }
-}
-
-# Function to check additional security settings
-function Check-AdditionalSecuritySettings {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        $results = @()
-        
-        # Check Internet resource contact settings
-        $internetSettings = @{
-            "HKLM:\Software\Policies\Microsoft\Windows\NetworkProvider\HardenedPaths" = "RequireMutualAuthentication=1, RequireIntegrity=1"
-            "HKLM:\Software\Policies\Microsoft\Windows NT\Terminal Services\Client" = "fEnableInternetPrinting=0"
-            "HKLM:\Software\Policies\Microsoft\Windows\DriverSearching" = "SearchOrderConfig=0"
-        }
-        
-        # Machine account and secure channel settings
-        $secureChannelPath = "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters"
-        $regSettings = @{
-            "RefusePasswordChange" = 1
-            "RequireSignOrSeal" = 1
-            "RequireStrongKey" = 1
-            "SignSecureChannel" = 1
-        }
-        
-        # System and security settings
-        $systemPoliciesPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
-        $systemSettings = @{
-            "ShutdownWithoutLogon" = 0
-            "ConsentPromptBehaviorUser" = 0
-            "EnableFontProviders" = 0
-        }
-        
-        # Network and Group Policy settings
-        $networkSettingsPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\NetworkConnections"
-        $networkSettings = @{
-            "NC_ShowSharedAccessUI" = 0
-            "NC_StdDomainUserSetLocation" = 1
-        }
-        
-        # LLTD settings (Mapper I/O and Responder)
-        $lltdPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LLTD"
-        $lltdSettings = @{
-            "AllowLLTDIO" = 0
-            "AllowRspndr" = 0
-        }
-        
-        # Print settings
-        $printPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers"
-        $printSettings = @{
-            "DisableWebPnPDownload" = 1
-            "DisableHTTPPrinting" = 1
-            "RestrictDriverInstallationToAdministrators" = 1
-        }
-        
-        # Point and Print restrictions
-        $pointPrintPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers\PointAndPrint"
-        $pointPrintSettings = @{
-            "NoWarningNoElevationOnInstall" = 0
-            "UpdatePromptSettings" = 0
-            "RestrictDriverInstallationToAdministrators" = 1
-        }
-        
-        # Microsoft connection settings
-        $msConnectionPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Internet Connection Wizard"
-        $msSettings = @{
-            "ExitOnMSICW" = 1
-            "DownloadFilesDemand" = 0
-        }
-        
-        # Additional settings for registration and search companion
-        $extraSettings = @{
-            "HKLM:\Software\Policies\Microsoft\Windows\Registration Wizard Control" = @{ "NoRegistration" = 1 }
-            "HKLM:\Software\Policies\Microsoft\SearchCompanion" = @{ "DisableContentFileUpdates" = 1 }
-        }
-        
-        # Check registry values
-        function Check-RegistryValue {
-            param ($Path, $Key, $ExpectedValue)
-            
-            if (Test-Path $Path) {
-                $value = Get-ItemProperty -Path $Path -Name $Key -ErrorAction SilentlyContinue
-                if ($value.$Key -eq $ExpectedValue) {
-                    return "✓ $Key is properly configured"
-                } else {
-                    return "✗ $Key is NOT properly configured"
-                }
-            } else {
-                return "✗ Registry path $Path not found"
-            }
-        }
-        
-        # Process all settings
-        foreach ($setting in $regSettings.GetEnumerator()) {
-            $results += Check-RegistryValue -Path $secureChannelPath -Key $setting.Key -ExpectedValue $setting.Value
-        }
-        
-        foreach ($setting in $systemSettings.GetEnumerator()) {
-            $results += Check-RegistryValue -Path $systemPoliciesPath -Key $setting.Key -ExpectedValue $setting.Value
-        }
-        
-        foreach ($setting in $lltdSettings.GetEnumerator()) {
-            $results += Check-RegistryValue -Path $lltdPath -Key $setting.Key -ExpectedValue $setting.Value
-        }
-        
-        foreach ($setting in $printSettings.GetEnumerator()) {
-            $results += Check-RegistryValue -Path $printPath -Key $setting.Key -ExpectedValue $setting.Value
-        }
-        
-        foreach ($setting in $pointPrintSettings.GetEnumerator()) {
-            $results += Check-RegistryValue -Path $pointPrintPath -Key $setting.Key -ExpectedValue $setting.Value
-        }
-        
-        foreach ($setting in $msSettings.GetEnumerator()) {
-            $results += Check-RegistryValue -Path $msConnectionPath -Key $setting.Key -ExpectedValue $setting.Value
-        }
-        
-        foreach ($path in $extraSettings.Keys) {
-            foreach ($setting in $extraSettings[$path].GetEnumerator()) {
-                $results += Check-RegistryValue -Path $path -Key $setting.Key -ExpectedValue $setting.Value
-            }
-        }
-        
-        # Determine status
-        if ($results.Where({$_ -match "✗"}).Count -eq 0) {
-            Add-Result -Description $Description -Status "Applied" -Details ($results -join ", ")
-        } else {
-            Add-Result -Description $Description -Status "Not Applied" -Details ($results -join ", ")
-        }
-        
-    } catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking additional security settings: $_"
-    }
-}
-
-# Add this new function after the existing functions and before the "Run all checks" section
-
-function Check-AdditionalPolicySettings {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        $checks = @{
-            # Picture Tasks and Publishing
-            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" = @{
-                "NoOnlinePrintsWizard" = @(1, "Turn off 'Order Prints' picture task")
-                "NoPublishingWizard" = @(1, "Turn off 'Publish to Web' task")
-            }
-            
-            # Customer Experience and Error Reporting
-            "HKLM:\SOFTWARE\Policies\Microsoft\Messenger\Client" = @{
-                "CEIP" = @(0, "Turn off Windows Messenger CEIP")
-            }
-            "HKLM:\SOFTWARE\Policies\Microsoft\SQMClient\Windows" = @{
-                "CEIPEnable" = @(0, "Turn off Windows CEIP")
-            }
-            "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting" = @{
-                "Disabled" = @(1, "Turn off Windows Error Reporting")
-            }
-            
-            # Authentication and Security
-            "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" = @{
-                "EnableSecuritySignature" = @(1, "Support device authentication using certificate")
-            }
-            
-            # Lock Screen and Sign-in
-            "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" = @{
-                "DisableLockScreenAppNotifications" = @(1, "Turn off app notifications on lock screen")
-                "BlockDomainPicturePassword" = @(1, "Turn off picture password sign-in")
-                "AllowDomainPINLogon" = @(0, "Turn off convenience PIN sign-in")
-            }
-            
-            # Windows Time Service
-            "HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters" = @{
-                "Type" = @("NTP", "Enable Windows NTP Client")
-            }
-            
-            # App and Account Settings
-            "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\AppModel\StateManager" = @{
-                "AllowSharedLocalAppData" = @(0, "Disable app data sharing between users")
-            }
-            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" = @{
-                "MSAOptional" = @(1, "Allow Microsoft accounts to be optional")
-                "DisablePasswordReveal" = @(1, "Do not display password reveal button")
-            }
-            
-            # Remote Desktop Settings
-            "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" = @{
-                "fDisableCcm" = @(1, "Do not allow COM port redirection")
-                "fPromptForPassword" = @(1, "Always prompt for password upon connection")
-            }
-        }
-        
-        $results = @()
-        $allPassed = $true
-        
-        foreach ($path in $checks.Keys) {
-            foreach ($setting in $checks[$path].GetEnumerator()) {
-                $keyName = $setting.Key
-                $expectedValue = $setting.Value[0]
-                $settingDescription = $setting.Value[1]
-                
-                if (Test-Path $path) {
-                    $actualValue = (Get-ItemProperty -Path $path -Name $keyName -ErrorAction SilentlyContinue).$keyName
-                    if ($null -eq $actualValue) {
-                        $results += "✗ $settingDescription - Setting not found"
-                        $allPassed = $false
-                    }
-                    elseif ($actualValue -eq $expectedValue) {
-                        $results += "✓ $settingDescription"
-                    }
-                    else {
-                        $results += "✗ $settingDescription - Expected: $expectedValue, Found: $actualValue"
-                        $allPassed = $false
-                    }
-                }
-                else {
-                    $results += "✗ $settingDescription - Registry path not found"
-                    $allPassed = $false
-                }
-            }
-        }
-        
-        if ($allPassed) {
-            Add-Result -Description $Description -Status "Applied" -Details ($results -join "; ")
-        }
-        else {
-            Add-Result -Description $Description -Status "Not Applied" -Details ($results -join "; ")
-        }
-    }
-    catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking additional policy settings: $_"
-    }
-}
-
-# Add this new function to check additional security settings
-
-function Check-ExtendedSecuritySettings {
-    param (
-        [string]$Description
-    )
-    
-    try {
-        $checks = @{
-            # Remote Desktop Settings
-            "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" = @{
-                "fDisablePNPRedir" = @(1, "Do not allow supported Plug and Play device redirection")
-                "fEncryptRPCTraffic" = @(1, "Require secure RPC communication")
-                "DeleteTempDirsOnExit" = @(0, "Do not delete temp folders upon exit")
-                "PerSessionTempDir" = @(0, "Do not use temporary folders per session")
-                "fPromptForPassword" = @(1, "Do not allow passwords to be saved")
-                "MaxIdleTime" = @(900000, "Set time limit for active but idle RDS sessions (15 mins)")
-            }
-            
-            # Windows Defender and Security Features
-            "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Spyware" = @{
-                "SubmitSamplesConsent" = @(0, "Disable Join Microsoft MAPS")
-            }
-            
-            # Windows Ink Settings
-            "HKLM:\SOFTWARE\Policies\Microsoft\WindowsInkWorkspace" = @{
-                "AllowSuggestedAppsInWindowsInkWorkspace" = @(0, "Disable suggested apps in Windows Ink Workspace")
-                "AllowWindowsInkWorkspace" = @(0, "Disable Windows Ink Workspace")
-            }
-            
-            # Media Settings
-            "HKLM:\SOFTWARE\Policies\Microsoft\WindowsMediaPlayer" = @{
-                "PreventCodecDownload" = @(1, "Prevent Codec Download")
-            }
-            
-            # Explorer and Shell Settings
-            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" = @{
-                "NoAutoplayfornonVolume" = @(1, "Disable drive redirection by default")
-                "NoDriveTypeAutoRun" = @(255, "Disable Autorun for all drives")
-            }
-            
-            # Recycle Bin Settings
-            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\BitBucket" = @{
-                "RetentionPeriod" = @(7, "Set Recycle Bin retention to 7 days")
-            }
-            
-            # UAC Settings
-            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" = @{
-                "EnumerateAdministrators" = @(0, "Disable Enumerate administrator accounts on elevation")
-            }
-            
-            # Internet Explorer Settings
-            "HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main" = @{
-                "DisableFirstRunCustomize" = @(1, "Disable Internet Explorer first run customization")
-            }
-            
-            # Smart Screen Settings
-            "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" = @{
-                "EnableSmartScreen" = @(1, "Enable Smart Screen")
-                "ShellSmartScreenLevel" = @("Block", "Set Smart Screen to block mode")
-            }
-            
-            # FTP Settings
-            "HKLM:\SYSTEM\CurrentControlSet\Services\FTPSVC" = @{
-                "Start" = @(4, "Disable Anonymous FTP")
-            }
-        }
-        
-        $results = @()
-        $allPassed = $true
-        
-        foreach ($path in $checks.Keys) {
-            foreach ($setting in $checks[$path].GetEnumerator()) {
-                $keyName = $setting.Key
-                $expectedValue = $setting.Value[0]
-                $settingDescription = $setting.Value[1]
-                
-                if (Test-Path $path) {
-                    $actualValue = (Get-ItemProperty -Path $path -Name $keyName -ErrorAction SilentlyContinue).$keyName
-                    if ($null -eq $actualValue) {
-                        $results += "✗ $settingDescription - Setting not found"
-                        $allPassed = $false
-                    }
-                    elseif ($actualValue -eq $expectedValue) {
-                        $results += "✓ $settingDescription"
-                    }
-                    else {
-                        $results += "✗ $settingDescription - Expected: $expectedValue, Found: $actualValue"
-                        $allPassed = $false
-                    }
-                }
-                else {
-                    $results += "✗ $settingDescription - Registry path not found"
-                    $allPassed = $false
-                }
-            }
-        }
-        
-        # Additional check for IE installation on operator workstations
-        $computerRole = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty PCSystemType
-        if ($computerRole -eq 2) { # Workstation
-            $ieVersion = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Internet Explorer" -Name Version -ErrorAction SilentlyContinue
-            if ($null -ne $ieVersion) {
-                $results += "✗ Internet Explorer should be disabled on operator workstations"
-                $allPassed = $false
-            }
-            else {
-                $results += "✓ Internet Explorer is not installed on operator workstation"
-            }
-        }
-        
-        if ($allPassed) {
-            Add-Result -Description $Description -Status "Applied" -Details ($results -join "; ")
-        }
-        else {
-            Add-Result -Description $Description -Status "Not Applied" -Details ($results -join "; ")
-        }
-    }
-    catch {
-        Add-Result -Description $Description -Status "Error" -Details "Error checking extended security settings: $_"
-    }
-}
-
-# Add this function before the "Run all checks" section
+# Function to check registry settings
 function Check-RegistrySetting {
     param (
         [string]$Path,
@@ -1481,6 +192,1206 @@ function Check-RegistrySetting {
     }
 }
 
+function Check-NetworkSecuritySettings {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # 1. Check IPv6 Settings
+        $adapters = Get-NetAdapterBinding -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
+        $allDisabled = $true
+        foreach ($adapter in $adapters) {
+            if ($adapter.Enabled) {
+                $allDisabled = $false
+                break
+            }
+        }
+        Add-Result -Description "DisableIpv6ForAllAdaptors" `
+            -Status $(if ($allDisabled) { "Applied" } else { "Not Applied" }) `
+            -Details "IPv6 status on network adapters"
+
+        # 2. Check Windows Firewall
+        $firewallProfiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue
+        $firewallEnabled = $true
+        foreach ($profile in $firewallProfiles) {
+            if (-not $profile.Enabled) {
+                $firewallEnabled = $false
+                break
+            }
+        }
+        Add-Result -Description "EnableWindowsFirewallForNeededProgramsPortsProtocols" `
+            -Status $(if ($firewallEnabled) { "Applied" } else { "Not Applied" }) `
+            -Details "Windows Firewall status across all profiles"
+
+        # 3. Check NetBIOS Settings
+        $adaptersWithNetBIOS = Get-WmiObject -Class Win32_NetworkAdapterConfiguration | 
+            Where-Object { $_.IPEnabled -eq $true -and $_.TcpipNetbiosOptions -ne 2 }
+        Add-Result -Description "DisableNetbiosOverTcpIpForAllNetworkAdaptorsThatHaveIpEnabled" `
+            -Status $(if ($null -eq $adaptersWithNetBIOS) { "Applied" } else { "Not Applied" }) `
+            -Details "NetBIOS over TCP/IP status"
+
+        # 4. Check Digital Signing Settings
+        Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" `
+            -Name "RequireSecuritySignature" `
+            -ExpectedValue 1 `
+            -Description "SecurityMsNetworkClientEnableDigitallySignedCommsAlways"
+
+        # 5. Check DNS Client Settings
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient" `
+            -Name "EnableMulticast" `
+            -ExpectedValue 0 `
+            -Description "DnsClientEnableTurnOffMulticastNameResolution"
+
+        # 6. Check Unused Network Adapters
+        $disabledAdapters = Get-NetAdapter -ErrorAction SilentlyContinue | 
+            Where-Object { $_.Status -eq 'Disabled' }
+        Add-Result -Description "DisableUnusedNetworkAdapters" `
+            -Status "Manual Check Required" `
+            -Details "Manual verification needed for unused network adapters"
+
+        # 7. Check Secure Channel Settings
+        Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters" `
+            -Name "SignSecureChannel" `
+            -ExpectedValue 1 `
+            -Description "EnableDigitallyEncryptOrSignSecureChannelDataAlways"
+
+        # 8. Check Point and Print Restrictions
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers\PointAndPrint" `
+            -Name "RestrictDriverInstallationToAdministrators" `
+            -ExpectedValue 1 `
+            -Description "EnablePointAndPrintRestrictionsWhenInstallingNewDrivers"
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking network security settings: $_"
+    }
+}
+
+function Check-RemoteAccessSecuritySettings {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # 1. Check Remote Desktop Device Redirection
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
+            -Name "fDisablePNPRedir" `
+            -ExpectedValue 1 `
+            -Description "DoNotAllowSupportedPlugAndPlayDeviceRedirection"
+
+        # 2. Check Remote Desktop Password Prompt
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
+            -Name "fPromptForPassword" `
+            -ExpectedValue 1 `
+            -Description "EnableAlwaysPromptClientForPasswordUponConnection"
+
+        # 3. Check COM Port Redirection
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
+            -Name "fDisableCcm" `
+            -ExpectedValue 1 `
+            -Description "EnableDoNotAllowComPortRedirection"
+
+        # 4. Check RDP Password Saving
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
+            -Name "DisablePasswordSaving" `
+            -ExpectedValue 1 `
+            -Description "EnableDoNotAllowPasswordsToBeSavedInGpoForRemoteDesktop"
+
+        # 5. Check RPC Communication
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
+            -Name "fEncryptRPCTraffic" `
+            -ExpectedValue 1 `
+            -Description "EnableRequireSecureRpcCommunication"
+
+        # 6. Check RDP Session Time Limit
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
+            -Name "MaxIdleTime" `
+            -ExpectedValue 900000 `  # 15 minutes in milliseconds
+            -Description "EnableSetTimeLimitForActiveButIdleRemoteDesktopSessions15Mins"
+
+        # 7. Check Remote Assistance
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
+            -Name "fAllowToGetHelp" `
+            -ExpectedValue 0 `
+            -Description "RemoteAssistanceDisableConfigureOfferRemoteAssistance"
+
+        # 8. Check Force Shutdown Restrictions
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
+            -Name "ShutdownWithoutLogon" `
+            -ExpectedValue 0 `
+            -Description "RestrictForceShutdownToAdminGroupUsersWithNeed"
+
+        # 9. Check Drive Redirection
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
+            -Name "fDisableCdm" `
+            -ExpectedValue 1 `
+            -Description "VerifyDriveRedirectionIsNotConfiguredByDefault"
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking Remote Access Security settings: $_"
+    }
+}
+
+# Add these new check functions first:
+
+function Check-UACAdvancedSettings {
+    # Add checks for UAC advanced settings
+    Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "ConsentPromptBehaviorAdmin" -ExpectedValue 2 -Description "ElevationPromptForAdminsInAdminApprovalModeConsentOnSecureDesktop"
+    Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "ConsentPromptBehaviorUser" -ExpectedValue 1 -Description "ElevationPromptForStandardUsersCredentialsOnSecureDesktop"
+    Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableInstallerDetection" -ExpectedValue 1 -Description "DetectAppInstallsPromptForElevationEnabled"
+    Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableSecureUIAPaths" -ExpectedValue 1 -Description "ElevateUIAccessAppsInSecureLocationsEnabled"
+    Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "PromptOnSecureDesktop" -ExpectedValue 1 -Description "SwitchToSecureDesktopWhenPromptingForElevationEnabled"
+    Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableVirtualization" -ExpectedValue 1 -Description "VirtualizeFileRegistryWritesToPerUserLocationsEnabled"
+}
+
+function Check-SecurityAuditingSettings {
+#    Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Audit" -Name "ProcessCreationIncludeCmdLine_Enabled" -ExpectedValue 1 -Description "AuditPolicies"
+    Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Eventlog\Security" -Name "MaxSize" -ExpectedValue 4194240 -Description "EventLogSize"
+}
+
+function Check-DeviceAndMediaRestrictions {
+    param (
+        [string]$Description
+    )
+    
+    $cdDvdPath = "HKLM:\Software\Policies\Microsoft\Windows\RemovableStorageDevices\{53f56308-b6bf-11d0-94f2-00a0c91efb8b}"
+    
+    try {
+        # Check both read and write restrictions
+        $readDeny = Check-RegistrySetting -Path $cdDvdPath `
+            -Name "Deny_Read" `
+            -ExpectedValue 1 `
+            -Description "RemovableStorageEnableCdAndDvdDeny"
+            
+        $writeDeny = Check-RegistrySetting -Path $cdDvdPath `
+            -Name "Deny_Write" `
+            -ExpectedValue 1 `
+            -Description "RemovableStorageEnableCdAndDvdDeny"
+            
+        # Only mark as applied if both restrictions are in place
+        if ($readDeny -and $writeDeny) {
+            Add-Result -Description $Description -Status "Applied" -Details "CD/DVD read and write access denied"
+        } else {
+            Add-Result -Description $Description -Status "Not Applied" -Details "CD/DVD restrictions incomplete"
+        }
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking CD/DVD restrictions: $_"
+    }
+}
+
+function Check-NetworkAdapters {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $adapters = Get-NetAdapter -ErrorAction SilentlyContinue
+        Add-Result -Description $Description -Status "Not Applied" -Details "Manual verification required"
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking network adapters: $_"
+    }
+}
+
+# Add these additional functions
+function Check-LogonBanner {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # Check Legal Notice Caption
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
+            -Name "LegalNoticeCaption" `
+            -ExpectedValue "Warning!" `
+            -Description "LoginBanner"
+
+        # Check Legal Notice Text
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
+            -Name "LegalNoticeText" `
+            -ExpectedValue "*" `
+            -Description "MessageTitleForLogonAttemptsDisplayWarningBanner"
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking logon banner: $_"
+    }
+}
+
+function Check-SecurityPolicies {
+    # Password Policies
+    $securityPolicy = SecEdit /Export /cfg "$env:TEMP\secpol.cfg"
+    $passwordPolicy = Get-Content "$env:TEMP\secpol.cfg" | Select-String "PasswordComplexity"
+    Add-Result -Description "PasswordPolicies" -Status $(if ($passwordPolicy -match "1") { "Applied" } else { "Not Applied" })
+    
+    # Lockout Policies
+    $lockoutPolicy = Get-Content "$env:TEMP\secpol.cfg" | Select-String "LockoutDuration"
+    Add-Result -Description "LockoutPolicies" -Status $(if ($lockoutPolicy -match "15") { "Applied" } else { "Not Applied" })
+    
+    Remove-Item "$env:TEMP\secpol.cfg" -Force
+}
+
+# Add these functions after the existing function definitions but before the "Run all checks" section:
+
+function Check-UnnecessaryPrograms {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # Get list of installed programs
+        $installedPrograms = Get-WmiObject -Class Win32_Product
+        
+        # Add your specific program checks here
+        # This is a placeholder - customize based on your requirements
+        Add-Result -Description $Description -Status "Not Applied" -Details "Manual verification required"
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking programs: $_"
+    }
+}
+
+function Check-ServiceDisabled {
+    param (
+        [string]$ServiceName,
+        [string]$Description
+    )
+    
+    try {
+        $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+        
+        if ($null -eq $service) {
+            Add-Result -Description $Description -Status "Not Found" -Details "Service not found"
+        }
+        else {
+            $details = "Expected: Disabled, Found: $($service.Status)"
+            if ($service.Status -eq 'Stopped' -and $service.StartType -eq 'Disabled') {
+                Add-Result -Description $Description -Status "Applied" -Details $details
+            }
+            else {
+                Add-Result -Description $Description -Status "Not Applied" -Details $details
+            }
+        }
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking service: $_"
+    }
+}
+
+function Check-UserAccounts {
+    param (
+        [string]$Description,
+        [string]$AccountType
+    )
+    
+    try {
+        $accounts = Get-LocalUser | Where-Object { $_.Enabled -eq $true }
+        Add-Result -Description $Description -Status "Not Applied" -Details "Manual verification required"
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking user accounts: $_"
+    }
+}
+
+function Check-AdminRenamed {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $adminAccount = Get-LocalUser -Name "Administrator" -ErrorAction SilentlyContinue
+        if ($null -eq $adminAccount) {
+            Add-Result -Description $Description -Status "Applied" -Details "Administrator account has been renamed"
+        }
+        else {
+            Add-Result -Description $Description -Status "Not Applied" -Details "Administrator account still has default name"
+        }
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking admin account: $_"
+    }
+}
+
+function Check-GuestDisabled {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $guestAccount = Get-LocalUser -Name "Guest" -ErrorAction SilentlyContinue
+        if ($null -eq $guestAccount -or $guestAccount.Enabled -eq $false) {
+            Add-Result -Description $Description -Status "Applied" -Details "Guest account is disabled"
+        }
+        else {
+            Add-Result -Description $Description -Status "Not Applied" -Details "Guest account is enabled"
+        }
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking guest account: $_"
+    }
+}
+
+function Check-ServiceAccounts {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # This would need to be customized for your environment
+        Add-Result -Description $Description -Status "Not Applied" -Details "Manual verification required"
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking service accounts: $_"
+    }
+}
+
+function Check-SecuritySoftware {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # Check for antivirus
+        $avStatus = Get-WmiObject -Namespace root\SecurityCenter2 -Class AntiVirusProduct -ErrorAction SilentlyContinue
+        if ($null -ne $avStatus) {
+            Add-Result -Description $Description -Status "Applied" -Details "Antivirus software detected"
+        }
+        else {
+            Add-Result -Description $Description -Status "Not Applied" -Details "No antivirus software detected"
+        }
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking security software: $_"
+    }
+}
+
+function Check-AuditPolicies {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $auditpol = auditpol /get /category:* | Out-String
+        Add-Result -Description $Description -Status "Not Applied" -Details "Manual verification required"
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking audit policies: $_"
+    }
+}
+
+function Check-NTPConfiguration {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $w32TimeService = Get-Service -Name "W32Time"
+        if ($w32TimeService.Status -eq 'Running') {
+            Add-Result -Description $Description -Status "Applied" -Details "NTP service is running"
+        }
+        else {
+            Add-Result -Description $Description -Status "Not Applied" -Details "NTP service is not running"
+        }
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking NTP configuration: $_"
+    }
+}
+
+function Check-USBStorageRestrictions {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # Check USB storage restrictions in registry
+        Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\USBSTOR" `
+            -Name "Start" `
+            -ExpectedValue 4 `
+            -Description "DisableAllUsbPortsForStandardUsersUnlessNeeded"
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking USB restrictions: $_"
+    }
+}
+
+function Check-CDROMRestrictions {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # Check CD-ROM driver service state
+        Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\cdrom" `
+            -Name "Start" `
+            -ExpectedValue 4 `
+            -Description "DisableCdRomDrivesForStandardUsers"
+
+        # Additionally check for disabled CD-ROM devices
+        $cdromDevices = Get-PnpDevice | Where-Object { $_.Class -eq "CDROM" }
+        $allDisabled = $true
+        $details = ""
+
+        foreach ($device in $cdromDevices) {
+            if ($device.Status -ne 'Disabled') {
+                $allDisabled = $false
+                $details += "Device '$($device.FriendlyName)' is not disabled; "
+            }
+        }
+
+        if ($cdromDevices.Count -eq 0) {
+            Add-Result -Description $Description -Status "Not Found" -Details "No CD-ROM devices found"
+        }
+        elseif ($allDisabled) {
+            Add-Result -Description $Description -Status "Applied" -Details "All CD-ROM devices are disabled"
+        }
+        else {
+            Add-Result -Description $Description -Status "Not Applied" -Details $details
+        }
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking CD-ROM restrictions: $_"
+    }
+}
+
+function Check-AutorunSettings {
+    param (
+        [string]$Description
+    )
+    try {
+        # Check autorun settings in registry
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" `
+            -Name "NoDriveTypeAutoRun" `
+            -ExpectedValue 255 `
+            -Description "DisableAutorunForExternalMedia"
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking autorun settings: $_"
+    }
+}
+
+function Check-Firewall {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $firewall = Get-NetFirewallProfile -ErrorAction SilentlyContinue
+        if ($null -ne $firewall -and ($firewall | Where-Object { $_.Enabled -eq $true }).Count -eq 3) {
+            Add-Result -Description $Description -Status "Applied" -Details "Firewall is enabled for all profiles"
+        }
+        else {
+            Add-Result -Description $Description -Status "Not Applied" -Details "Firewall is not properly configured"
+        }
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking firewall: $_"
+    }
+}
+
+# Add these new functions
+
+function Check-PasswordPolicies {
+    param (
+        [string]$Description
+    )
+    try {
+        $securityPolicy = SecEdit /Export /cfg "$env:TEMP\secpol.cfg"
+        $passwordPolicy = Get-Content "$env:TEMP\secpol.cfg" | Select-String "PasswordComplexity"
+        if ($passwordPolicy -match "1") {
+            Add-Result -Description $Description -Status "Applied" -Details "Password complexity enabled"
+        } else {
+            Add-Result -Description $Description -Status "Not Applied" -Details "Password complexity not enabled"
+        }
+        Remove-Item "$env:TEMP\secpol.cfg" -Force
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking password policies: $_"
+    }
+}
+
+function Check-UACSettings {
+    param (
+        [string]$Description,
+        [string]$RegistryName,
+        [int]$ExpectedValue
+    )
+    Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name $RegistryName -ExpectedValue $ExpectedValue -Description $Description
+}
+
+function Check-InteractiveLogonPolicy {
+    param (
+        [string]$PolicyName,
+        [string]$ExpectedValue,
+        [string]$Description
+    )
+    try {
+        $path = "HKLM:\\" + ($PolicyName -replace "MACHINE\\", "")
+        Check-RegistrySetting -Path $path -Name ($PolicyName.Split('\')[-1]) -ExpectedValue $ExpectedValue -Description $Description
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking interactive logon policy: $_"
+    }
+}
+
+function Check-NTLMSettings {
+    param (
+        [string]$Description
+    )
+    Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "LmCompatibilityLevel" -ExpectedValue 5 -Description $Description
+}
+
+function Check-AnonymousEnumeration {
+    param (
+        [string]$Description
+    )
+    Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "RestrictAnonymous" -ExpectedValue 1 -Description $Description
+}
+
+function Check-RecoveryConsoleSettings {
+    param (
+        [string]$Description
+    )
+    Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Setup\RecoveryConsole" -Name "SecurityLevel" -ExpectedValue 0 -Description $Description
+}
+
+function Check-UserRightAssignment {
+    param (
+        [string]$RightName,
+        [string]$Description,
+        [bool]$ShouldBeEmpty,
+        [string[]]$AllowedAccounts
+    )
+    try {
+        $secedit = SecEdit /Export /cfg "$env:TEMP\secpol.cfg"
+        $rights = Get-Content "$env:TEMP\secpol.cfg" | Select-String $RightName
+        
+        if ($ShouldBeEmpty -and $rights -match "\*S-1-") {
+            Add-Result -Description $Description -Status "Not Applied" -Details "Right should be empty but has assignments"
+        }
+        elseif (-not $ShouldBeEmpty) {
+            $currentAccounts = ($rights -split "=")[1].Trim()
+            $matchesExpected = $true
+            foreach ($account in $AllowedAccounts) {
+                if ($currentAccounts -notmatch [regex]::Escape($account)) {
+                    $matchesExpected = $false
+                    break
+                }
+            }
+            Add-Result -Description $Description -Status $(if ($matchesExpected) { "Applied" } else { "Not Applied" }) -Details "Current assignments: $currentAccounts"
+        }
+        else {
+            Add-Result -Description $Description -Status "Applied" -Details "No assignments found"
+        }
+        Remove-Item "$env:TEMP\secpol.cfg" -Force
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking user rights: $_"
+    }
+}
+
+# Modify this function in the existing script to improve the registry check
+function Check-DeviceInstallationSettings {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions"
+        
+        # Add debug output
+        Write-Host "Checking Device Installation Settings at: $regPath"
+        Write-Host "Path exists: $(Test-Path $regPath)"
+        
+        if (Test-Path $regPath) {
+            $actualValue = (Get-ItemProperty -Path $regPath -Name "AllowAdminInstall" -ErrorAction SilentlyContinue).AllowAdminInstall
+            Write-Host "Found value: $actualValue"
+            
+            if ($null -eq $actualValue) {
+                Add-Result -Description "DeviceInstallAllowAdminsToOverrideInstallRestrictions" `
+                    -Status "Not Found" `
+                    -Details "Registry value 'AllowAdminInstall' not found"
+            }
+            else {
+                $details = "Expected: 1, Found: $actualValue"
+                if ($actualValue -eq 1) {
+                    Add-Result -Description "DeviceInstallAllowAdminsToOverrideInstallRestrictions" `
+                        -Status "Applied" `
+                        -Details $details
+                }
+                else {
+                    Add-Result -Description "DeviceInstallAllowAdminsToOverrideInstallRestrictions" `
+                        -Status "Not Applied" `
+                        -Details $details
+                }
+            }
+        }
+        else {
+            Add-Result -Description "DeviceInstallAllowAdminsToOverrideInstallRestrictions" `
+                -Status "Not Found" `
+                -Details "Registry path not found"
+        }
+    }
+    catch {
+        Add-Result -Description "DeviceInstallAllowAdminsToOverrideInstallRestrictions" `
+            -Status "Error" `
+            -Details "Error checking device installation settings: $_"
+    }
+}
+
+function Check-RemovableStorageAccess {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # Check removable storage access restrictions
+        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices"
+        
+        if (Test-Path $regPath) {
+            $denyAll = (Get-ItemProperty -Path $regPath -Name "Deny_All" -ErrorAction SilentlyContinue).Deny_All
+            
+            if ($null -eq $denyAll) {
+                Add-Result -Description $Description -Status "Not Found" -Details "Deny_All setting not found"
+            }
+            else {
+                $details = "Expected: 1, Found: $denyAll"
+                if ($denyAll -eq 1) {
+                    Add-Result -Description $Description -Status "Applied" -Details $details
+                }
+                else {
+                    Add-Result -Description $Description -Status "Not Applied" -Details $details
+                }
+            }
+        }
+        else {
+            Add-Result -Description $Description -Status "Not Found" -Details "Registry path not found"
+        }
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking removable storage access: $_"
+    }
+}
+
+function Check-NetworkSettings {
+    param (
+        [string]$Description
+    )
+    Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name "DisableIPSourceRouting" -ExpectedValue 2 -Description $Description
+}
+
+function Check-PowerShellSettings {
+    param (
+        [string]$Description
+    )
+    Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell" -Name "EnableScriptBlockLogging" -ExpectedValue 1 -Description $Description
+}
+
+function Check-AuditPolicies {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # Export current audit policy to a temporary file
+        $auditPolicyOutput = auditpol /get /category:* | Out-String
+        
+        # Check if key audit policies are enabled
+        $requiredPolicies = @(
+            "Credential Validation",
+            "Application Group Management",
+            "Computer Account Management",
+            "Distribution Group Management",
+            "Other Account Management Events",
+            "Security Group Management",
+            "User Account Management"
+            
+        )
+
+        $policyStatus = $true
+        $details = ""
+
+        foreach ($policy in $requiredPolicies) {
+            if ($auditPolicyOutput -match [regex]::Escape($policy)) {
+                $line = ($auditPolicyOutput -split "`n" | Where-Object { $_ -match [regex]::Escape($policy) }).Trim()
+                if ($line -notmatch "Success and Failure") {
+                    $policyStatus = $false
+                    $details += "$policy not fully enabled; "
+                }
+            }
+        }
+
+        if ($policyStatus) {
+            Add-Result -Description $Description -Status "Applied" -Details "Audit policies are correctly configured"
+        } else {
+            Add-Result -Description $Description -Status "Not Applied" -Details $details
+        }
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking audit policies: $_"
+    }
+}
+
+function Check-RemovableDiskExecuteRestrictions {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $srpPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Safer\CodeIdentifiers\262144\Paths"
+        
+        if (Test-Path $srpPath) {
+            $hasRestrictions = $false
+            $details = ""
+            
+            # Check all numbered paths
+            Get-ChildItem $srpPath | ForEach-Object {
+                $itemData = Get-ItemProperty -Path $_.PSPath -Name "ItemData" -ErrorAction SilentlyContinue
+                $saferFlags = Get-ItemProperty -Path $_.PSPath -Name "SaferFlags" -ErrorAction SilentlyContinue
+                
+                if ($itemData.ItemData -like "*:\*" -and $saferFlags.SaferFlags -eq 0) {
+                    $hasRestrictions = $true
+                    $details += "Found restriction for $($itemData.ItemData); "
+                }
+            }
+            
+            if ($hasRestrictions) {
+                Add-Result -Description $Description -Status "Applied" -Details $details
+            } else {
+                Add-Result -Description $Description -Status "Not Applied" -Details "No removable disk execute restrictions found"
+            }
+        } else {
+            Add-Result -Description $Description -Status "Not Found" -Details "Software Restriction Policies path not found"
+        }
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking removable disk execute restrictions: $_"
+    }
+}
+
+function Check-SmartScreenSettings {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        $regPath = "HKLM:\Software\Policies\Microsoft\Internet Explorer\PhishingFilter"
+        
+        # Check both required settings
+        $enabled = Check-RegistrySetting -Path $regPath `
+            -Name "EnabledV9" `
+            -ExpectedValue 1 `
+            -Description "ActivateSmartScreenViaMicrosoftDefenderEtcManagedByGroupPolicy"
+            
+        $preventOverride = Check-RegistrySetting -Path $regPath `
+            -Name "PreventOverride" `
+            -ExpectedValue 1 `
+            -Description "ActivateSmartScreenViaMicrosoftDefenderEtcManagedByGroupPolicy"
+        
+        # Only mark as applied if both settings are correct
+        if ($enabled -and $preventOverride) {
+            Add-Result -Description $Description -Status "Applied" -Details "SmartScreen is enabled and prevent override is set"
+        } else {
+            Add-Result -Description $Description -Status "Not Applied" -Details "SmartScreen settings are incomplete"
+        }
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking SmartScreen settings: $_"
+    }
+}
+
+# Add this function to check Edge Hardening policies
+function Check-EdgeHardeningSettings {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # 1. Windows Ink Workspace Settings
+        Check-RegistrySetting -Path "HKLM:\Software\Policies\Microsoft\WindowsInkWorkspace" `
+            -Name "AllowWindowsInkWorkspace" `
+            -ExpectedValue 0 `
+            -Description "DisableAllowWindowsInkWorkspace"
+
+        Check-RegistrySetting -Path "HKLM:\Software\Policies\Microsoft\WindowsInkWorkspace" `
+            -Name "AllowSuggestedAppsInWindowsInkWorkspace" `
+            -ExpectedValue 0 `
+            -Description "DisableAllowSuggestedAppsInWindowsInkWorkspace"
+
+        # 2. Windows Error Reporting
+        Check-RegistrySetting -Path "HKLM:\Software\Policies\Microsoft\Windows\Windows Error Reporting" `
+            -Name "Disabled" `
+            -ExpectedValue 1 `
+            -Description "EnableTurnOffWindowsErrorReporting"
+
+        # 3. Windows Customer Experience Improvement Program
+        Check-RegistrySetting -Path "HKLM:\Software\Policies\Microsoft\SQMClient\Windows" `
+            -Name "CEIPEnable" `
+            -ExpectedValue 0 `
+            -Description "EnableTurnOffWindowsCustomerExpImprovementProgram"
+
+        # 4. Windows Messenger CEIP
+        Check-RegistrySetting -Path "HKLM:\Software\Policies\Microsoft\Messenger\Client" `
+            -Name "CEIP" `
+            -ExpectedValue 2 `
+            -Description "EnableTurnOffTheWindowsMessengerCustomerExpImprovementProgram"
+
+        # 5. Publish to Web Task
+        Check-RegistrySetting -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" `
+            -Name "NoPublishingWizard" `
+            -ExpectedValue 1 `
+            -Description "EnableTurnOffThePublishToWebTaskForFilesAndFolders"
+
+        # 6. Order Prints Picture Task
+        Check-RegistrySetting -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" `
+            -Name "NoOnlinePrintsWizard" `
+            -ExpectedValue 1 `
+            -Description "EnableTurnOffTheOrderPrintsPictureTask"
+
+        # 7. Search Companion Updates
+        Check-RegistrySetting -Path "HKLM:\Software\Policies\Microsoft\SearchCompanion" `
+            -Name "DisableContentFileUpdates" `
+            -ExpectedValue 1 `
+            -Description "EnableTurnOffSearchCompanionContentFileUpdates"
+
+        # 8. Microsoft Maps
+        Check-RegistrySetting -Path "HKLM:\Software\Policies\Microsoft\Windows Defender\Spynet" `
+            -Name "SpynetReporting" `
+            -ExpectedValue 0 `
+            -Description "DisableJoinMicrosoftMaps"
+
+        Check-RegistrySetting -Path "HKLM:\Software\Policies\Microsoft\Windows Defender\Spynet" `
+            -Name "SubmitSamplesConsent" `
+            -ExpectedValue 2 `
+            -Description "DisableJoinMicrosoftMaps"
+
+        # 9. Internet Explorer
+        # Check if Internet Explorer feature is disabled
+        $ieFeature = Get-WindowsOptionalFeature -Online -FeatureName "Internet-Explorer-Optional-amd64" -ErrorAction SilentlyContinue
+        if ($ieFeature.State -eq "Disabled") {
+            Add-Result -Description "DisableInternetExplorerOnUnnecessaryWorkstationsEtc" `
+                -Status "Applied" `
+                -Details "Internet Explorer feature is disabled"
+        } else {
+            Add-Result -Description "DisableInternetExplorerOnUnnecessaryWorkstationsEtc" `
+                -Status "Not Applied" `
+                -Details "Internet Explorer feature is not disabled"
+        }
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking Edge Hardening settings: $_"
+    }
+}
+
+# Add this function with the others (keep all existing functions)
+function Check-OtherFolderSettings {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # 1. Check Windows App Data Sharing
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\AppModel\StateManager" `
+            -Name "AllowSharedLocalAppData" `
+            -ExpectedValue 0 `
+            -Description "DisableAllowAWindowsAppToShareApplicationData"
+
+        # 2. Check PIN Sign-in
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" `
+            -Name "AllowDomainPINLogon" `
+            -ExpectedValue 0 `
+            -Description "DisableTurnOnConveniencePinSignIn"
+
+        # 3. Check Device Authentication
+        Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\LSA" `
+            -Name "DeviceAuthEnabled" `
+            -ExpectedValue 1 `
+            -Description "EnableSupportDeviceAuthenticationUsingCertificateAutomatic"
+
+        # 4. Check App Notifications
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" `
+            -Name "DisableLockScreenAppNotifications" `
+            -ExpectedValue 1 `
+            -Description "EnableTurnOffAppNotificationsOnTheLockScreen"
+
+        # 5. Check Picture Password
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" `
+            -Name "BlockDomainPicturePassword" `
+            -ExpectedValue 1 `
+            -Description "EnableTurnOffPicturePasswordSignIn"
+
+        # 6. Check Windows NTP Client
+        Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters" `
+            -Name "Type" `
+            -ExpectedValue "NTP" `
+            -Description "EnableWindowsNtpClient"
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking other folder settings: $_"
+    }
+}
+
+# Add this function with your other check functions:
+function Check-SystemHardeningPolicies {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # 1. Check Internet Resource Contact
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Internet Connection Wizard" `
+            -Name "ExitOnMSICW" `
+            -ExpectedValue 1 `
+            -Description "ComputersWillBeConfiguredToNotContactInternetResources"
+
+        # 2. Check NTP Configuration
+        Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters" `
+            -Name "Type" `
+            -ExpectedValue "NTP" `
+            -Description "ConfigureNtp"
+
+        # 3. Check System Shutdown Settings
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
+            -Name "ShutdownWithoutLogon" `
+            -ExpectedValue 0 `
+            -Description "DisableAllowSystemToBeShutDownWithoutHavingToLogOn"
+
+        # 4. Check Temp Folder Deletion
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
+            -Name "DeleteTempDirsOnExit" `
+            -ExpectedValue 1 `
+            -Description "DisableDoNotDeleteTempFoldersUponExit"
+
+        # 5. Check Font Providers
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" `
+            -Name "EnableFontProviders" `
+            -ExpectedValue 0 `
+            -Description "DisableEnableFontProviders"
+
+        # 6. Check Guest Logons
+        Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" `
+            -Name "AllowInsecureGuestAuth" `
+            -ExpectedValue 0 `
+            -Description "DisableEnableInsecureGuestLogons"
+
+        # 7. Check Machine Account Password Changes
+        Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters" `
+            -Name "RefusePasswordChange" `
+            -ExpectedValue 0 `
+            -Description "DisableRefuseMachineAccountPasswordChanges"
+
+        # 8. Check Group Policy Background Refresh
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Group Policy\{35378EAC-683F-11D2-A89A-00C04FBBCFA2}" `
+            -Name "NoBackgroundPolicy" `
+            -ExpectedValue 0 `
+            -Description "DisableTurnOffBackgroundRefreshOfGroupPolicy"
+
+        # 9. Check Temporary Folders Per Session
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
+            -Name "PerSessionTempDir" `
+            -ExpectedValue 1 `
+            -Description "EnableDoNotUseTemporaryFoldersPerSession"
+
+        # 10. Check Security Software
+        $avStatus = Get-WmiObject -Namespace root\SecurityCenter2 -Class AntiVirusProduct -ErrorAction SilentlyContinue
+        if ($null -ne $avStatus) {
+            Add-Result -Description "DeploySecuritySoftwareAntiVirusWhitelistingPerOpsMaintFramework" `
+                -Status "Applied" `
+                -Details "Security software detected"
+        } else {
+            Add-Result -Description "DeploySecuritySoftwareAntiVirusWhitelistingPerOpsMaintFramework" `
+                -Status "Not Applied" `
+                -Details "No security software detected"
+        }
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking System Hardening settings: $_"
+    }
+}
+
+# Add this function with your other check functions:
+function Check-UserAccountSecurityPolicies {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # 1. Admin Approval Mode
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
+            -Name "FilterAdministratorToken" `
+            -ExpectedValue 1 `
+            -Description "AdminApprovalModeForBuiltInAdminAccountEnabled"
+
+        # 2. Password Policies
+        $secpolPath = "$env:TEMP\secpol.cfg"
+        secedit /export /cfg $secpolPath | Out-Null
+        $passwordPolicies = Get-Content $secpolPath | Select-String "PasswordComplexity", "MinimumPasswordLength"
+        
+        if (($passwordPolicies | Select-String "PasswordComplexity = 1") -and 
+            ($passwordPolicies | Select-String "MinimumPasswordLength = [8-9]|1[0-4]")) {
+            Add-Result -Description "ConfigurePasswordPoliciesPerAccessControlFramework" `
+                -Status "Applied" `
+                -Details "Password policies meet requirements"
+        } else {
+            Add-Result -Description "ConfigurePasswordPoliciesPerAccessControlFramework" `
+                -Status "Not Applied" `
+                -Details "Password policies do not meet requirements"
+        }
+        Remove-Item $secpolPath -Force
+
+        # 3. Standard User Elevation Prompt
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
+            -Name "ConsentPromptBehaviorUser" `
+            -ExpectedValue 0 `
+            -Description "DenyBehaviorOfTheElevationPromptForStandardUsers"
+
+        # 4. Application Installation Detection
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
+            -Name "EnableInstallerDetection" `
+            -ExpectedValue 1 `
+            -Description "DetectAppInstallsPromptForElevationEnabled"
+
+        # 5. Administrator Account Enumeration
+        Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\CredUI" `
+            -Name "EnumerateAdministrators" `
+            -ExpectedValue 0 `
+            -Description "DisableEnumerateAdministratorAccountsOnElevation"
+
+        # 6. Guest Account Status
+        $guestAccount = Get-LocalUser -Name "Guest" -ErrorAction SilentlyContinue
+        if ($null -eq $guestAccount -or $guestAccount.Enabled -eq $false) {
+            Add-Result -Description "DisableBuiltInGuestAccount" `
+                -Status "Applied" `
+                -Details "Guest account is disabled"
+        } else {
+            Add-Result -Description "DisableBuiltInGuestAccount" `
+                -Status "Not Applied" `
+                -Details "Guest account is enabled"
+        }
+
+        # 7. Service Account Interactive Login
+        $services = Get-WmiObject -Class Win32_Service | Where-Object { $_.StartName -notlike "NT *" -and $_.StartName -ne "LocalSystem" }
+        $interactiveServiceFound = $false
+        foreach ($service in $services) {
+            if ($service.StartName -match "^(?!NT|Local).*$") {
+                $interactiveServiceFound = $true
+                break
+            }
+        }
+        Add-Result -Description "DisableInteractiveLoginsForNonHumanServiceAccounts" `
+            -Status $(if (-not $interactiveServiceFound) { "Applied" } else { "Not Applied" }) `
+            -Details "Service account interactive login status"
+
+        # 8. Standard User Accounts Configuration
+        Add-Result -Description "ConfigureStandardUserAccountsPerAccessControlFramework" `
+            -Status "Manual Check Required" `
+            -Details "Standard user accounts configuration needs manual verification"
+
+        # 9. Admin Accounts Configuration
+        Add-Result -Description "ConfigureAdminAccountsPerAccessControlFramework" `
+            -Status "Manual Check Required" `
+            -Details "Admin accounts configuration needs manual verification"
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking User Account Security settings: $_"
+    }
+}
+
+# Add this function to handle Windows Ink Workspace settings checks
+function Check-WindowsInkWorkspaceSettings {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # Check Windows Ink Workspace settings
+        Check-RegistrySetting -Path "HKLM:\Software\Policies\Microsoft\WindowsInkWorkspace" `
+            -Name "AllowWindowsInkWorkspace" `
+            -ExpectedValue 0 `
+            -Description "DisableAllowWindowsInkWorkspace"
+
+        # Check Suggested Apps in Windows Ink Workspace
+        Check-RegistrySetting -Path "HKLM:\Software\Policies\Microsoft\WindowsInkWorkspace" `
+            -Name "AllowSuggestedAppsInWindowsInkWorkspace" `
+            -ExpectedValue 0 `
+            -Description "DisableAllowSuggestedAppsInWindowsInkWorkspace"
+    }
+    catch {
+        Add-Result -Description $Description -Status "Error" -Details "Error checking Windows Ink Workspace settings: $_"
+    }
+}
+
+# Update the registry check for internet access restrictions
+function Check-InternetAccessRestrictions {
+    param (
+        [string]$Description
+    )
+    
+    try {
+        # Define the registry path
+        $regPath = "HKLM:\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings"
+        
+        # First check if the path exists
+        if (-not (Test-Path $regPath)) {
+            Add-Result -Description $Description `
+                -Status "Not Found" `
+                -Details "Registry path not found: $regPath"
+            return
+        }
+
+        # Check each required setting
+        $proxyEnabled = $false
+        $proxyServer = $false
+        $proxyOverride = $false
+        $details = ""
+
+        try {
+            $settings = Get-ItemProperty -Path $regPath -ErrorAction Stop
+            $proxyEnabled = ($settings.ProxyEnable -eq 1)
+            $proxyServer = ($settings.ProxyServer -eq "127.0.0.1:8080")
+            $proxyOverride = ($settings.ProxyOverride -eq "<local>")
+            
+            $details += "Proxy Enabled: $proxyEnabled; "
+            $details += "Proxy Server: $($settings.ProxyServer); "
+            $details += "Proxy Override: $($settings.ProxyOverride); "
+        }
+        catch {
+            $details += "Error reading proxy settings; "
+        }
+
+        # Check firewall rule
+        $firewallRule = Get-NetFirewallRule -DisplayName "Block Internet Access" -ErrorAction SilentlyContinue
+        $firewallEnabled = $false
+        
+        if ($firewallRule) {
+            $firewallEnabled = ($firewallRule.Enabled -eq $true -and 
+                              $firewallRule.Direction -eq "Outbound" -and 
+                              $firewallRule.Action -eq "Block")
+            $details += "Firewall rule found and properly configured: $firewallEnabled"
+        }
+        else {
+            $details += "Firewall rule 'Block Internet Access' not found"
+        }
+        
+        # Determine overall status
+        if ($proxyEnabled -and $proxyServer -and $proxyOverride -and $firewallEnabled) {
+            Add-Result -Description $Description `
+                -Status "Applied" `
+                -Details $details
+        }
+        else {
+            Add-Result -Description $Description `
+                -Status "Not Applied" `
+                -Details $details
+        }
+    }
+    catch {
+        Add-Result -Description $Description `
+            -Status "Error" `
+            -Details "Error checking internet access restrictions: $_"
+    }
+}
+
 # Run all checks
 Write-Host "Running security configuration checks..."
 
@@ -1499,30 +1410,29 @@ Check-ServiceAccounts -Description "Configure non-human service accounts to disa
 
 # 3. Security Software and Settings
 Check-SecuritySoftware -Description "Deploy and configure security software"
-Check-AuditingPolicies -Description "Configure auditing and logging"
+Check-AuditPolicies -Description "AuditPolicies"  # Keep this one
 Check-PasswordPolicies -Description "Configure password policies"
-Check-NTPConfiguration -Description "Configure NTP"
 
 # 4. Device and Media Controls
 Check-USBStorageRestrictions -Description "Disable USB ports for standard users"
 Check-CDROMRestrictions -Description "Disable CD-ROM drives for standard users"
 Check-AutorunSettings -Description "Disable 'Autorun' capability for all external media"
+Check-RemovableDiskExecuteRestrictions -Description "RemovableStorageEnableRemovableDiskDenyExecute"
 
 # 5. Network Security
-Check-Firewall -Description "Enable and configure Windows firewall"
-Check-NetworkAdapters -Description "Disable unused network adapters"
+Write-Host "Checking Network Security Settings..." -ForegroundColor Cyan
+Check-NetworkSecuritySettings -Description "NetworkSecuritySettings"
 
 # 6. UAC Settings
-Check-UACSettings -Description "Enable UAC" -RegistryName "EnableLUA" -ExpectedValue 1
 Check-UACSettings -Description "Set UAC to highest level" -RegistryName "ConsentPromptBehaviorAdmin" -ExpectedValue 2
-Check-UACSettings -Description "Enable secure desktop" -RegistryName "PromptOnSecureDesktop" -ExpectedValue 1
-# New UAC Settings Checks
-Check-AdditionalUACSettings -RegistryName "EnableUIADesktopToggle" -Description "Set 'Admin Approval Mode for the built-in Administrator account' to Enabled" -ExpectedValue 1
-Check-AdditionalUACSettings -RegistryName "ValidateAdminCodeSignatures" -Description "Set 'Only elevate executables that are signed and validated' to Enabled" -ExpectedValue 1
-Check-AdditionalUACSettings -RegistryName "EnableInstallerDetection" -Description "Set 'Detect application installations and prompt for elevation' to Enabled" -ExpectedValue 1
-Check-AdditionalUACSettings -RegistryName "EnableSecureUIAPaths" -Description "Set 'Only elevate UIAccess applications that are installed in secure locations' to Enabled" -ExpectedValue 1
-Check-AdditionalUACSettings -RegistryName "EnableVirtualization" -Description "Set 'Virtualize file and registry write failures to per-user locations' to Enabled" -ExpectedValue 1
-Check-AdditionalUACSettings -RegistryName "ConsentPromptBehaviorUser" -Description "Set 'Behavior of the elevation prompt for standard users' to 'Prompt for credentials on the secure desktop'" -ExpectedValue 1
+
+# Device Installation Message Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions" -Name "DisplayCustomMessage" -ExpectedValue 1 -Description "DeviceInstallDisplayCustomMessageWhenInstallIsPrevented"
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions" -Name "DisplayCustomTitle" -ExpectedValue 1 -Description "DeviceInstallDisplayCustomTitleWhenInstallIsPrevented"
+
+# Removable Storage Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices" -Name "Deny_CD_DVD" -ExpectedValue 1 -Description "RemovableStorageEnableCdAndDvdDeny"
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices" -Name "Deny_Execute" -ExpectedValue 1 -Description "RemovableStorageEnableRemovableDiskDenyExecute"
 
 # Interactive Logon Policies
 Check-InteractiveLogonPolicy -PolicyName "MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\DontDisplayLastUserName" -ExpectedValue "1" -Description "Security Option: Interactive Logon - Do not display last user name"
@@ -1548,9 +1458,6 @@ Check-UserRightAssignment -RightName "SeNetworkLogonRight" -Description "Restric
 Check-UserRightAssignment -RightName "SeRemoteShutdownPrivilege" -Description "Restrict the 'Force Shutdown from a Remote System' policy to administrators" -AllowedAccounts @("*S-1-5-32-544") # Only Administrators
 
 # Network Security Settings
-Check-NetworkSecuritySettings -Description "Check network security settings"
-
-# Device Installation Settings
 Check-DeviceInstallationSettings -Description "Check device installation settings"
 
 # Removable Storage Access
@@ -1562,89 +1469,224 @@ Check-NetworkSettings -Description "Check network settings"
 # PowerShell Settings
 Check-PowerShellSettings -Description "Check PowerShell settings"
 
-# SMB Settings
-Check-SMBSettings -Description "Check SMB settings"
+# Add these checks after your existing checks but before the compliance calculation
 
-# Add these lines after your existing checks
-Check-NetworkSecuritySettings -Description "Network Security - Digital Signing and NTLM SSP Settings"
-Check-DeviceInstallationSettings -Description "Device Installation Policies"
-Check-RemovableStorageAccess -Description "Removable Storage Access Restrictions"
-Check-NetworkSettings -Description "Network Settings (LLMNR, Remote Assistance, IPv6, NetBIOS)"
-Check-PowerShellSettings -Description "PowerShell Security Settings"
-Check-SMBSettings -Description "SMB Version 1 Status"
+# Check Internet Resource Contact Settings
+Check-InternetAccessRestrictions -Description "ComputersWillBeConfiguredToNotContactInternetResources"
 
-# Additional Security Settings
-Check-AdditionalSecuritySettings -Description "Additional Security Settings"
+# Check Machine Account Password Settings
+Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters" -Name "RefusePasswordChange" -ExpectedValue 1 -Description "DisableRefuseMachineAccountPasswordChanges"
 
-# # Add these to your existing checks section
-# Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Group Policy\{35378EAC-683F-11D2-A89A-00C04FBBCFA2}" -Name "NoBackgroundPolicy" -ExpectedValue 0 -Description "Group Policy background refresh"
+# Check Secure Channel Settings
+Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters" -Name "SignSecureChannel" -ExpectedValue 1 -Description "EnableDigitallyEncryptOrSignSecureChannelDataAlways"
 
-# Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers" -Name "DisableWebPnPDownload" -ExpectedValue 1 -Description "Print driver downloads over HTTP"
+# Check Session Key Settings
+Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters" -Name "RequireStrongKey" -ExpectedValue 1 -Description "EnableRequireStrongSessionKey"
 
-# Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DriverSearching" -Name "SearchOrderConfig" -ExpectedValue 0 -Description "Internet driver search"
+# Check System Shutdown Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "ShutdownWithoutLogon" -ExpectedValue 0 -Description "DisableAllowSystemToBeShutDownWithoutHavingToLogOn"
 
-# Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableFontProviders" -ExpectedValue 0 -Description "Font Providers"
+# Check Guest Logon Settings
+Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "AllowInsecureGuestAuth" -ExpectedValue 0 -Description "DisableEnableInsecureGuestLogons"
 
-# Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers\PointAndPrint" -Name "RestrictDriverInstallationToAdministrators" -ExpectedValue 1 -Description "Printer driver installation restrictions"
+# Check Mapper I/O Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LLTD" -Name "AllowLLTDIO" -ExpectedValue 0 -Description "DisableTurnOnMapperIoLltddioDriver"
 
-# Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Search" -Name "DisableWebSearch" -ExpectedValue 1 -Description "Search Companion updates"
+# Check Responder Driver Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LLTD" -Name "AllowRspndr" -ExpectedValue 0 -Description "DisableTurnOnResponderRspndrDriver"
 
-# Add this line in the "Run all checks" section, before the final compliance calculation
-Check-AdditionalPolicySettings -Description "Additional Security Policy Settings"
+# Check Group Policy Refresh Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Group Policy\{35378EAC-683F-11D2-A89A-00C04FBBCFA2}" -Name "NoBackgroundPolicy" -ExpectedValue 0 -Description "DisableTurnOffBackgroundRefreshOfGroupPolicy"
 
-# Add this line in the "Run all checks" section, before the compliance calculation
-Check-ExtendedSecuritySettings -Description "Extended Security Settings"
+# Check Print Driver Download Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers" -Name "DisableWebPnPDownload" -ExpectedValue 1 -Description "EnableTurnOffDownloadingOfPrintDriversOverHttp"
 
-# Add these checks to the $checks hashtable in Check-ExtendedSecuritySettings function
-$checks += @{
-    "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Group Policy\{35378EAC-683F-11D2-A89A-00C04FBBCFA2}" = @{
-        "NoBackgroundPolicy" = @(0, "Group Policy background refresh")
-    }
-    "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers" = @{
-        "DisableWebPnPDownload" = @(1, "Print driver downloads over HTTP")
-    }
-    "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DriverSearching" = @{
-        "SearchOrderConfig" = @(0, "Internet driver search")
-    }
-    "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" = @{
-        "EnableFontProviders" = @(0, "Font Providers")
-    }
-    "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers\PointAndPrint" = @{
-        "RestrictDriverInstallationToAdministrators" = @(1, "Printer driver installation restrictions")
-    }
-    "HKLM:\SOFTWARE\Policies\Microsoft\Search" = @{
-        "DisableWebSearch" = @(1, "Search Companion updates")
-    }
-}
+# Check Internet Download Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoWebServices" -ExpectedValue 1 -Description "EnableTurnOffInternetDownloadForWebPublishingOnlineOrdering"
+
+# Check HTTP Printing Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers" -Name "DisableHTTPPrinting" -ExpectedValue 1 -Description "EnableTurnOffPrintingOverHttp"
+
+# Check Picture Ordering Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoOnlinePrintsWizard" -ExpectedValue 1 -Description "EnableTurnOffTheOrderPrintsPictureTask"
+
+# Check Web Publishing Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoPublishingWizard" -ExpectedValue 1 -Description "EnableTurnOffThePublishToWebTaskForFilesAndFolders"
+
+# Check Windows Messenger Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Messenger\Client" -Name "CEIP" -ExpectedValue 0 -Description "EnableTurnOffTheWindowsMessengerCustomerExpImprovementProgram"
+
+# Check Windows Customer Experience Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\SQMClient\Windows" -Name "CEIPEnable" -ExpectedValue 0 -Description "EnableTurnOffWindowsCustomerExpImprovementProgram"
+
+# Check Windows Error Reporting Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting" -Name "Disabled" -ExpectedValue 1 -Description "EnableTurnOffWindowsErrorReporting"
+
+# Check Device Authentication Settings
+Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "UseMachineId" -ExpectedValue 1 -Description "EnableSupportDeviceAuthenticationUsingCertificate"
+
+# Check App Notifications Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "DisableLockScreenAppNotifications" -ExpectedValue 1 -Description "EnableTurnOffAppNotificationsOnTheLockScreen"
+
+# Check Picture Password Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "BlockDomainPicturePassword" -ExpectedValue 1 -Description "EnableTurnOffPicturePasswordSignIn"
+
+# Check PIN Sign-in Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "AllowDomainPINLogon" -ExpectedValue 0 -Description "DisableTurnOnConveniencePinSignIn"
+
+# Check App Data Sharing Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\AppModel\StateManager" -Name "AllowSharedLocalAppData" -ExpectedValue 0 -Description "DisableAllowAWindowsAppToShareApplicationData"
+
+# Check Microsoft Account Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "MSAOptional" -ExpectedValue 1 -Description "EnableAllowMicrosoftAccountsToBeOptional"
+
+# Check Password Reveal Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CredUI" -Name "DisablePasswordReveal" -ExpectedValue 1 -Description "EnableDoNotDisplayThePasswordRevealButton"
+
+# Check RDP Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" -Name "fPromptForPassword" -ExpectedValue 1 -Description "EnableDoNotAllowPasswordsToBeSavedInGpoForRemoteDesktop"
+
+# Check Windows Store Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsStore" -Name "RemoveWindowsStore" -ExpectedValue 1 -Description "DisableWindowsStoreOnUnnecessaryWorkstationsEtc"
+
+# Check Windows Ink Settings
+Check-WindowsInkWorkspaceSettings -Description "DisableAllowSuggestedAppsInWindowsInkWorkspace"
+
+# Check Drive Redirection Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoAutoplayfornonVolume" -ExpectedValue 1 -Description "VerifyDriveRedirectionIsNotConfiguredByDefault"
+
+# Check RDP Session Time Limit Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" -Name "MaxIdleTime" -ExpectedValue 900000 -Description "EnableSetTimeLimitForActiveButIdleRemoteDesktopSessions15Mins"
+
+# Check Recycle Bin Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\BitBucket" -Name "RetentionPeriod" -ExpectedValue 7 -Description "RecycleBinSettingFilesDeletedAfter7DaysRestrictRecycleBinStorage"
+
+# SmartScreen Settings
+Check-SmartScreenSettings -Description "ActivateSmartScreenViaMicrosoftDefenderEtcManagedByGroupPolicy"
+
+# Device Installation Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions" -Name "AllowAdminInstall" -ExpectedValue 1 -Description "DeviceInstallAllowAdminsToOverrideInstallRestrictions"
+
+# FTP Settings
+Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\FTPSVC\Parameters" -Name "AllowAnonymous" -ExpectedValue 0 -Description "DisableAnonymousFtpFileShareOnWindowsMachine"
+
+# Font Provider Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "EnableFontProviders" -ExpectedValue 0 -Description "DisableEnableFontProviders"
+
+# Administrator Enumeration Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\CredUI" -Name "EnumerateAdministrators" -ExpectedValue 0 -Description "DisableEnumerateAdministratorAccountsOnElevation"
+
+# Internet Explorer Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main" -Name "DisableFirstRunCustomize" -ExpectedValue 1 -Description "DisableInternetExplorerOnUnnecessaryWorkstationsEtc"
+
+# Microsoft Maps Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Maps" -Name "AutoDownloadAndUpdateMapData" -ExpectedValue 0 -Description "DisableJoinMicrosoftMaps"
+
+# DNS Client Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient" -Name "EnableMulticast" -ExpectedValue 0 -Description "DnsClientEnableTurnOffMulticastNameResolution"
+
+# Anonymous Enumeration Settings
+Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "RestrictAnonymous" -ExpectedValue 1 -Description "DontAllowAnonymousEnumerationOfSamAcctsSharesEnabled"
+
+# LAN Manager Hash Settings
+Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "NoLMHash" -ExpectedValue 1 -Description "DontStoreLanManagerHashOnNextPasswordChangeDisabled"
+
+# Device Installation Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions" -Name "DenyDeviceClasses" -ExpectedValue 1 -Description "EnableDevicesPreventUsersFromInstallingPrinterDrivers"
+
+# Printer Driver Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers\PointAndPrint" -Name "RestrictDriverInstallationToAdministrators" -ExpectedValue 1 -Description "EnableLimitPrintDriverInstallationToAdministrators"
+
+# Codec Download Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsMediaPlayer" -Name "PreventCodecDownload" -ExpectedValue 1 -Description "EnablePreventCodecDownload"
+
+# Device Authentication Settings
+Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "UseMachineId" -ExpectedValue 1 -Description "EnableSupportDeviceAuthenticationUsingCertificateAutomatic"
+
+# Internet Connection Wizard Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Internet Connection Wizard" -Name "ExitOnMSICW" -ExpectedValue 1 -Description "EnableTurnOffInternetConnectionWizardIfUrlReferringMicrosoftCom"
+
+# Registration Wizard Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Registration Wizard Control" -Name "NoRegistration" -ExpectedValue 1 -Description "EnableTurnOffRegistrationIfUrlReferringToMicrosoftCom"
+
+# Search Companion Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\SearchCompanion" -Name "DisableContentFileUpdates" -ExpectedValue 1 -Description "EnableTurnOffSearchCompanionContentFileUpdates"
+
+# Windows Time Service Settings
+Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters" -Name "Type" -ExpectedValue "NTP" -Description "EnableWindowsNtpClient"
+
+# PowerShell Settings
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging" -Name "EnableModuleLogging" -ExpectedValue 1 -Description "WindowsPowerShellTurnOnModuleLogging"
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Name "EnableScriptBlockLogging" -ExpectedValue 1 -Description "WindowsPowerShellTurnOnPowerShellScriptBlockLogging"
+Check-RegistrySetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "EnableTranscripting" -ExpectedValue 1 -Description "WindowsPowerShellTurnOnPowerShellTranscription"
+
+# Running additional security configuration checks...
+
+# UAC Advanced Settings
+Check-UACAdvancedSettings
+
+# Comment out this line
+# Check-SecurityAuditingSettings
+
+# Device and Media Restrictions
+Check-DeviceAndMediaRestrictions
+
+# Call the new functions
+# Check-LoginBanner
+Check-SecurityPolicies
+
+# Add or update in the check section:
+Check-RegistrySetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Print\Providers\Policies" `
+    -Name "RestrictUserPrinterInstallation" `
+    -ExpectedValue 1 `
+    -Description "EnableDevicesPreventUsersFromInstallingPrinterDrivers"
+
+# Checking Edge Hardening Settings...
+Write-Host "Checking Edge Hardening Settings..." -ForegroundColor Cyan
+Check-EdgeHardeningSettings -Description "EdgeHardeningPolicies"
+
+# Checking Other Folder Settings...
+Write-Host "Checking Other Folder Settings..." -ForegroundColor Cyan
+Check-OtherFolderSettings -Description "OtherFolderPolicies"
+
+# Checking Remote Access Security Settings...
+Write-Host "Checking Remote Access Security Settings..." -ForegroundColor Cyan
+Check-RemoteAccessSecuritySettings -Description "RemoteAccessSecuritySettings"
+
+# Checking System Hardening Settings...
+Write-Host "Checking System Hardening Settings..." -ForegroundColor Cyan
+Check-SystemHardeningPolicies -Description "SystemHardeningPolicies"
+
+# Checking User Account Security Settings...
+Write-Host "Checking User Account Security Settings..." -ForegroundColor Cyan
+Check-UserAccountSecurityPolicies -Description "UserAccountSecurityPolicies"
+
+# Checking Internet Access Restrictions...
+Write-Host "Checking Internet Access Restrictions..." -ForegroundColor Cyan
+Check-InternetAccessRestrictions -Description "InternetAccessRestrictions"
+
+# Check if path exists
+Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions"
+
+# Check the value
+Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions" -Name "AllowAdminInstall"
 
 # Calculate compliance percentage
 $compliancePercentage = [math]::Round(($passedChecks / $totalChecks) * 100, 2)
 
-# Build the report
-$reportHeader = @"
-# Windows Security Configuration Check Report
-Generated on: $(Get-Date)
+# Format the results into the requested string format
+$formattedResults = ($results | ForEach-Object {
+    $status = if ($_.Status -eq "Not Applied") { "Policy Not Applied" } else { $_.Status }
+    $details = $_.Details -replace ',\s*', ','
+    
+    # Format each result exactly like the example
+    "PolicyName:$($_.Description)~CurrentStatus:$status~Details:$details"
+}) -join '|'
 
-## Summary
-- Total checks: $totalChecks
-- Passed checks: $passedChecks
-- Compliance: $compliancePercentage%
+# Write results to file (single line)
+$formattedResults | Out-File -FilePath $resultsFile -NoNewline -Encoding utf8
 
-## Detailed Results
-"@
 
-$detailedResults = foreach ($result in $results) {
-    "### $($result.Description)`n" +
-    "**Status:** $($result.Status)`n" +
-    "**Details:** $($result.Details)`n"
-}
-
-$report = $reportHeader + "`n`n" + ($detailedResults -join "`n")
-
-# Save the results
-$report | Out-File -FilePath $resultsFile -Encoding utf8
-
-# Clean up temporary files
 Remove-Item -Path $auditpolFile -Force -ErrorAction SilentlyContinue
 
 Write-Host "Security check completed. Results saved to: $resultsFile"
